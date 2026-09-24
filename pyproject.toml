@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "directedgo"
 version = "0.1.0"
-description = "Go on a graph: fixed vertices, mutable bindings"
+description = "Go on a graph, with directed bindings you can rewrite at runtime"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

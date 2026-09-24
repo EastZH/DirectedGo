@@ -2,8 +2,8 @@
 
 ``square_grid`` is the standard Go board -- and nothing more than a particular
 edge set over 361 vertices. ``torus`` is the same 361 vertices with the wrap
-edges added, which is what makes the "same vertices, different bindings" story
-concrete and testable.
+edges added, which is what makes the difference between two edge sets over one
+vertex set concrete and testable.
 
 Vertex ids are ``y * width + x`` with ``y`` counting **bottom to top**, so
 ``A19`` is id 342 on a 19x19 grid and its neighbours are exactly ``B19`` and

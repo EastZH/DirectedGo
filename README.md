@@ -1,11 +1,26 @@
 # DirectedGo
 
-Go on a graph, where the bindings have a direction. A board is a graph
-`G = (V, E)` — `V` are the points you play on, `E` is the "adjacent to" relation,
-which is also the liberty relation. Standard Go hard-codes `E` as a 19×19 grid;
-here `E` is data you can rewrite at runtime, one binding at a time.
+Go on a graph, where the bindings have a direction. The board is a graph, and
+"adjacent to" is data you can rewrite rather than a hard-coded grid.
 
-**The vertices never change. The bindings do.**
+The model is five definitions:
+
+1. **Points.** A set of points — the intersections of a board, in ordinary Go.
+2. **State.** A map from the point set to {black, white, empty}.
+3. **Bindings.** A relation from point to point. **A binding B does not mean B
+   binds A.**
+4. **Direct liberties.** The points a point binds to whose state is empty.
+5. **A stone's liberties.** The direct liberties of its own point, *unioned with*
+   the direct liberties of every point reachable from it along bindings between
+   stones of the same colour.
+
+Ordinary Go is the special case where the points are the 19×19 grid, the bindings
+are "one step up, down, left or right", and every binding is mutual. This library
+keeps definitions 1–5 and makes the grid an input instead of a law.
+
+Two things about a vertex are permanent: **its id and its position**. Ids are
+handed out in order and never reused — delete a point and its id is retired for
+good — and a vertex never moves. Everything else is the edge set:
 
 ```python
 from directedgo import square_grid, torus
@@ -14,15 +29,15 @@ graph = square_grid(19, 19)
 sorted(graph.label_of(v) for v in graph.neighbors(graph.id_of("A19")))
 # ['A18', 'B19']                       <- a corner, degree 2
 
-graph.rebind(torus(19, 19).edges())    # same 361 vertices, new bindings
+graph.rebind(torus(19, 19).edges())    # same 361 vertices, new edge set
 sorted(graph.label_of(v) for v in graph.neighbors(graph.id_of("A19")))
 # ['A1', 'A18', 'B19', 'T19']          <- same corner, now degree 4
 ```
 
 `A19` is still vertex 342, still at `(0, 18)`. Only its neighbours changed.
-
-That split is the data layout, not a convention: identity and geometry are frozen
-at construction, and the edge set is the only field ever written afterwards.
+`Graph` keeps labels and positions in fields that are never written after
+construction, and the adjacency in the one field that is, so this is a data
+layout rather than a rule to be remembered.
 
 ## Quickstart
 
@@ -38,22 +53,25 @@ print(board.to_ascii())
 `Game` adds turn order, passing and undo. `place()` raises on an illegal move,
 `try_place()` returns the exception as a value, `is_legal()` is a boolean.
 
-## Rules
+## Capture
 
-A **group** is everything a stone can reach by following bindings between stones
-of its own colour: itself, plus every same-coloured stone downstream,
-transitively. A group dies when **every point it binds to holds an opponent
-stone** — the pooled bindings of everything in the group, minus the group itself.
+Definition 5 pools a stone's liberties over everything it can **reach**, so a
+**group** is a stone plus every same-coloured stone downstream of it. Two
+consequences follow, and the engine rests on both:
 
-Reachability, so groups **overlap**: in a chain `a → b → c` they are `{a, b, c}`,
-`{b, c}` and `{c}`. Every group contains the groups downstream of it, and that is
-what keeps the rule consistent — a group's check set is a subset of the check set
-of anything that reaches it, so a group that dies takes everything downstream
-with it. The reverse does not hold: `c` can die while `a` and `b` live on.
+- **Groups overlap.** In a chain `a → b → c` they are `{a, b, c}`, `{b, c}` and
+  `{c}` — not a partition of the stones. What holds instead is nesting: every
+  group contains the groups downstream of it, and its **check set** (everything
+  the group binds to that is not in it) is a subset of the check set of anything
+  that reaches it.
+- **A group dies when every point in its check set holds an opponent stone**, an
+  empty check set counting as vacuously all-opponent. Because check sets nest, a
+  group that dies takes everything downstream with it; the reverse does not hold,
+  so `c` can die while `a` and `b` live on.
 
-On a standard board, where every binding is mutual, this is exactly ordinary Go:
-groups are the ordinary blocks, and the check set having no empty point is the
-ordinary "zero liberties". One rule is not:
+On a standard board every binding is mutual, so reaching and reaching back
+coincide: groups are the ordinary blocks, and an empty check set is the ordinary
+"no liberties". One rule is *not* ordinary Go:
 
 - **Self-capture is allowed.** A move that leaves the stone you played with
   nothing keeping it alive is legal — it comes off too. Playing into a fully
@@ -63,8 +81,8 @@ ordinary "zero liberties". One rule is not:
   from.
 
 `bind(a, b)` is mutual by default; `bind(a, b, directed=True)` binds one way, so a
-point can draw on another without being drawn on in turn, and simply binding a
-point to more points buys it more liberties.
+point can draw on another without being drawn on in turn — and binding a point to
+more points simply buys it more liberties.
 
 ## The visual editor
 

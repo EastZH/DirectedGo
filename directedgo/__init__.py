@@ -1,15 +1,16 @@
-"""directedgo -- Go on a graph, where the vertices are fixed and the bindings are not.
+"""directedgo -- Go on a graph, with directed bindings you can rewrite at runtime.
 
 Standard Go is Go on the 19x19 grid graph. Once the adjacency relation is data
 rather than a hard-coded loop, the same rules play on a torus, a ring, or any
-graph you like, while the 361 vertices keep their identities and positions.
+graph you like. A vertex's id and position are permanent; the edge set is the
+part you can replace.
 
     >>> from directedgo import Board, Color, square_grid, torus
     >>> board = Board(square_grid(19, 19))
     >>> board.place("D4", Color.BLACK).captured
     ()
 
-Same vertices, different bindings:
+Replacing the whole edge set, leaving every vertex exactly where it was:
 
     >>> graph = square_grid(19, 19)
     >>> sorted(graph.label_of(v) for v in graph.neighbors(graph.id_of("A19")))

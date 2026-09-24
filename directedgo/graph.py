@@ -1,10 +1,9 @@
-"""The graph layer: fixed vertices, mutable bindings.
+"""The graph layer: permanent vertex ids and positions, a replaceable edge set.
 
 This is the heart of the project. A Go board is a graph ``G = (V, E)`` where
 ``V`` are the vertices you can play on and ``E`` is the "is adjacent to"
 relation -- which is also the liberty relation. Standard Go hard-codes ``E`` as
-the 19x19 grid; here ``E`` is data you can rewrite at runtime while ``V`` stays
-exactly as it was.
+the 19x19 grid; here ``E`` is data you can rewrite at runtime.
 
 Three kinds of data live here, with deliberately different mutability:
 
@@ -16,10 +15,9 @@ Geometry     ``labels`` / ``positions``  immutable after construction
 Topology     ``_adj``                    freely mutable at runtime
 ===========  ==========================  ==================================
 
-"Vertex positions never change, but I can change the bindings" is therefore not
-a convention to be maintained by discipline -- it is the literal field layout.
 Geometry and topology are separate attributes, and only the topology one is ever
-written after ``__init__``.
+written after ``__init__``. That is a data layout rather than a rule to be
+remembered: this class offers no way to renumber or move a vertex.
 """
 
 from __future__ import annotations
@@ -396,9 +394,9 @@ class Graph:
     def rebind(self, edges: Iterable[tuple[int, int]], *, directed: bool = False) -> None:
         """Replace the entire edge set. One revision, however many edges.
 
-        This is the primitive that expresses "same vertices, different
-        bindings". Validation happens up front so a bad edge list cannot leave
-        the graph half-rewired.
+        This is the primitive that swaps the whole edge set while leaving every
+        vertex exactly where it is. Validation happens up front so a bad edge
+        list cannot leave the graph half-rewired.
         """
         pairs = [(self._check_alive(a), self._check_alive(b)) for a, b in edges]
         for a, b in pairs:
