@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Iterable, Iterator
+from typing import Any, Iterable, Iterator
 
 from .colors import Color
 from .errors import (
@@ -28,6 +28,16 @@ from .graph import Graph
 from .topologies import square_grid
 
 __all__ = ["Board", "BoardState", "MoveResult"]
+
+
+def _bits(mask: int) -> set[int]:
+    """Turn a bitmask back into the vertex ids it holds."""
+    out: set[int] = set()
+    while mask:
+        lowest = mask & -mask
+        out.add(lowest.bit_length() - 1)
+        mask ^= lowest
+    return out
 
 
 @dataclass(frozen=True)
@@ -144,19 +154,22 @@ class Board:
     def group(self, vertex: int | str) -> frozenset[int]:
         """The group containing ``vertex``.
 
-        A group is a **strongly connected** set of same-coloured stones: each
-        member can reach every other by following bindings. On a standard board
-        (where every binding is mutual) that is exactly the ordinary Go block.
-        It also covers what a mutual-only rule misses:
+        A group is everything the stone can **reach** by following bindings
+        between stones of its own colour: itself, plus every same-coloured stone
+        downstream, transitively. That is the rule in the notes -- a stone's
+        liberties are its own direct liberties *unioned with* the direct
+        liberties of every point it can reach -- and it is what a block does in
+        ordinary Go, where adjacency is symmetric and so reaching and reaching
+        back come to the same thing.
 
-        * a mutual pair -- a cycle of length two;
-        * a longer directed cycle such as ``a -> b -> c -> a``, whose members
-          pool their bindings and stop checking each other, just as mutually
-          bound stones do.
-
-        What it deliberately does *not* merge is a one-way binding with no way
-        back: ``a -> b`` alone leaves ``a`` leaning on ``b`` without the two
-        becoming one group.
+        Reachability, not mutual reachability, and that has a consequence worth
+        stating plainly: in a chain ``a -> b -> c`` the groups are
+        ``{a, b, c}``, ``{b, c}`` and ``{c}``. They **overlap**, so groups are
+        no longer a partition of the stones. Every group contains the groups
+        downstream of it, which is exactly why the rule is consistent: a group's
+        check set is a subset of the check set of anything that reaches it, so a
+        group that dies takes everything downstream with it. The reverse does
+        not hold -- ``c`` can die while ``a`` and ``b`` live on.
 
         Same-colour is part of the definition, and that is what keeps ordinary
         Go intact: on a standard board white ``A19`` and black ``B19`` are bound
@@ -166,19 +179,37 @@ class Board:
         v = self._graph.id_of(vertex)
         if self._stones[v] is Color.EMPTY:
             raise DirectedGoError(f"vertex {v} is empty and belongs to no group")
-        return self._groups_map()[v]
+        for comp in self._components():
+            if (comp["mask"] >> v) & 1:
+                return frozenset(_bits(comp["reach"]))
+        raise DirectedGoError(f"vertex {v} is in no component")  # unreachable
 
-    def _groups_map(self) -> dict[int, frozenset[int]]:
-        """Every stone mapped to its group, in a single pass.
+    def _components(self) -> list[dict[str, Any]]:
+        """Every strongly connected set of same-coloured stones, with what its
+        group pools over.
 
-        Tarjan's algorithm over the subgraph induced by stones of one colour.
-        The whole map is computed rather than one group on demand because
-        "which group contains v" is a *global* question: whether ``a -> b -> a``
-        closes a cycle can depend on bindings nowhere near either stone, so
-        there is no local flood fill that answers it.
+        Two stages. Tarjan's algorithm over the subgraph induced by stones of
+        one colour, then a single pass up the condensation. Tarjan closes
+        components sinks-first, so every component reachable from the one being
+        folded has already been folded -- which is what makes one pass enough,
+        and why the components come back in an order where a component's
+        successors always have smaller indices.
 
-        Iterative, because a 19x19 board of one colour is 361 frames deep and
-        Python's recursion limit is not the right thing to be tuning here.
+        Each entry carries bitmasks rather than sets: with a few hundred vertices
+        a Python int is a perfectly good bitset, and unioning the masks up the
+        condensation is then a handful of machine words per edge.
+
+        ``members``
+            the component itself. Used to find *which* group a vertex is the
+            root of; the reach sets overlap so they cannot be used for that.
+        ``reach``
+            everything reachable from the component, itself included. This is
+            the group.
+        ``check``
+            ``pool \\ reach``: everything the group binds to that is not in it.
+            The group dies when all of that holds an opponent stone.
+        ``opp``
+            the opponent's bitmask, shared, so the death test is one AND.
         """
         graph = self._graph
         stones = self._stones
@@ -188,8 +219,10 @@ class Board:
         low = [0] * count
         on_stack = [False] * count
         stack: list[int] = []
-        groups: dict[int, frozenset[int]] = {}
         counter = 0
+
+        comp_id = [-1] * count
+        comps: list[dict[str, Any]] = []
 
         for root in range(count):
             color = stones[root]
@@ -225,21 +258,48 @@ class Board:
 
                 work.pop()
                 if low[node] == index[node]:
-                    component: set[int] = set()
+                    members: list[int] = []
                     while True:
                         w = stack.pop()
                         on_stack[w] = False
-                        component.add(w)
+                        members.append(w)
                         if w == node:
                             break
-                    frozen = frozenset(component)
-                    for w in component:
-                        groups[w] = frozen
+                    s = len(comps)
+                    for w in members:
+                        comp_id[w] = s
+                    comps.append({"color": color, "members": members})
                 if work and on_stack[node]:
                     parent = work[-1][0]
                     low[parent] = min(low[parent], low[node])
 
-        return groups
+        bits: dict[Color, int] = {Color.BLACK: 0, Color.WHITE: 0}
+        for w, c in enumerate(stones):
+            if c is not Color.EMPTY:
+                bits[c] |= 1 << w
+
+        for s, comp in enumerate(comps):
+            reach = 0
+            pool = 0
+            for w in comp["members"]:
+                reach |= 1 << w
+            comp["mask"] = reach          # members only, before reach grows
+            for w in comp["members"]:
+                for u in graph.neighbors(w):
+                    if stones[u] is comp["color"]:
+                        t = comp_id[u]
+                        if t == s:
+                            pool |= 1 << u
+                        else:
+                            reach |= comps[t]["reach"]
+                            pool |= comps[t]["pool"]
+                    else:
+                        pool |= 1 << u
+            comp["reach"] = reach
+            comp["pool"] = pool
+            comp["check"] = pool & ~reach
+            comp["opp"] = bits[comp["color"].opponent()]
+        return comps
 
     def block(self, vertex: int | str) -> frozenset[int]:
         """Alias for :meth:`group` -- the Go term for it."""
@@ -249,8 +309,8 @@ class Board:
         """What a group is judged against.
 
         ``N(G)`` is everything the members bind to, minus the members
-        themselves -- they are excluded because mutually bound stones are
-        stipulated not to check each other.
+        themselves. Members are excluded because a group is stipulated not to
+        check itself: its bindings are pooled into one verdict instead.
         """
         members = frozenset(group)
         out: set[int] = set()
@@ -267,8 +327,10 @@ class Board:
         empty check set counts as all-opponent, so a stone with no bindings at
         all is dead: it has no liberty and nothing keeping it up.
 
-        Note a friendly stone in the check set keeps the group alive without
-        being a liberty -- that is what a one-way binding to a friend buys.
+        Note a *friendly* stone in the check set keeps the group alive without
+        being a liberty. That happens when a friend binds **to** the group but
+        the group does not reach back: reach a stone and it is yours to fall
+        with, be reached by one and it merely holds you up.
         """
         members = frozenset(group)
         if not members:
@@ -298,8 +360,14 @@ class Board:
         return bool(self.liberties(vertex))
 
     def groups(self) -> list[frozenset[int]]:
-        """Every group on the board, in a deterministic order."""
-        return sorted(set(self._groups_map().values()), key=min)
+        """Every group on the board, in a deterministic order.
+
+        Groups overlap -- every group contains the groups downstream of it -- so
+        these are the distinct ones, one per strongly connected component.
+        """
+        return sorted(
+            {frozenset(_bits(c["reach"])) for c in self._components()}, key=min
+        )
 
     def blocks(self) -> list[frozenset[int]]:
         """Alias for :meth:`groups` -- the Go term for them."""
@@ -308,10 +376,18 @@ class Board:
     def dead_groups(self) -> list[frozenset[int]]:
         """Groups the capture rule takes off the board.
 
+        A group is dead when its check set is entirely opponent stones, or empty
+        -- which is vacuously all-opponent. Because groups overlap, several of
+        these can nest; the stones that actually come off are their union.
+
         Legal play never leaves one behind; editing the bindings can, which is
         why this is worth being able to ask about.
         """
-        return [grp for grp in self.groups() if self.is_captured(grp)]
+        return [
+            frozenset(_bits(c["reach"]))
+            for c in self._components()
+            if not c["check"] & ~c["opp"]
+        ]
 
     def dead_blocks(self) -> list[frozenset[int]]:
         """Alias for :meth:`dead_groups` -- the Go term."""
@@ -348,52 +424,47 @@ class Board:
         self._stones[v] = color
         opponent = color.opponent()
 
-        # One grouping pass for the whole move, on the board *after* the stone
-        # lands. A set, because several predecessors can share a group and the
-        # same stones must not be counted twice.
-        groups = self._groups_map()
+        # Everything is judged on the board *after* the stone lands. Only groups
+        # that can reach a point binding to v have a changed check set -- a stone
+        # somewhere else cannot alter any of them.
+        binds_to_v = 0
+        for u in self._graph.predecessors(v):
+            binds_to_v |= 1 << u
+        landed = self._components()
 
         # Take the opponent's dead groups first. Doing this before judging our
         # own is what lets a move that fills its last liberty survive by taking
         # the opponent's -- checking self-capture before captures is the single
         # most common way to get this rule wrong.
-        #
-        # A stone at v changes the verdict for every group that binds *to* v,
-        # i.e. every group containing a predecessor of v. On a symmetric graph
-        # that is the familiar "the groups touching the played stone"; with
-        # one-way bindings it is not, which is why this walks predecessors.
-        captured: list[int] = []
-        candidates = {
-            groups[u]
-            for u in self._graph.predecessors(v)
-            if self._stones[u] is opponent
-        }
-        for group in candidates:
-            if self.is_captured(group):
-                captured.extend(group)
+        captured: set[int] = set()
+        for comp in landed:
+            if comp["color"] is not opponent or not comp["reach"] & binds_to_v:
+                continue
+            if not comp["check"] & ~comp["opp"]:
+                captured |= _bits(comp["reach"])
 
         for c in captured:
             self._stones[c] = Color.EMPTY
 
         # Then, on the board the captures left behind: does the played group
         # stand? If not it comes off too, which is the whole point of allowing
-        # self-capture.
-        #
-        # ``groups[v]`` is still the right group after those removals -- the
-        # stones just taken were the opponent's colour, so they never took part
-        # in the same-colour subgraph this group is computed from. Only the
-        # *colours* its check set sees have changed, which is exactly what
-        # ``is_captured`` needs to look at again.
-        self_captured: list[int] = []
-        if self.is_captured(groups[v]):
-            self_captured.extend(groups[v])
+        # self-capture. The removals only ever create empty points, so nothing
+        # *else* can have died because of them -- but the groupings themselves
+        # can have shifted, so recompute rather than reusing ``landed``.
+        self_captured: set[int] = set()
+        played = next(c for c in (self._components() if captured else landed)
+                      if c["mask"] >> v & 1)
+        played_group = frozenset(_bits(played["reach"]))
+        if not played["check"] & ~played["opp"]:
+            self_captured = _bits(played["reach"])
             for c in self_captured:
                 self._stones[c] = Color.EMPTY
 
         # A ko needs the played stone to still be there to be recaptured, so a
         # move that cost you the stone cannot set a ban.
         self._ko_point = (
-            None if self_captured else self._detect_ko(v, captured, groups[v])
+            None if self_captured
+            else self._detect_ko(v, sorted(captured), played_group)
         )
         self._move_number += 1
         return MoveResult(

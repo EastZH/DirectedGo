@@ -40,10 +40,16 @@ print(board.to_ascii())
 
 ## Rules
 
-A **group** is a strongly connected set of same-coloured stones: every member can
-reach every other by following bindings. A group dies when **every point it binds
-to holds an opponent stone** — the pooled bindings of all its members, minus the
-members themselves.
+A **group** is everything a stone can reach by following bindings between stones
+of its own colour: itself, plus every same-coloured stone downstream,
+transitively. A group dies when **every point it binds to holds an opponent
+stone** — the pooled bindings of everything in the group, minus the group itself.
+
+Reachability, so groups **overlap**: in a chain `a → b → c` they are `{a, b, c}`,
+`{b, c}` and `{c}`. Every group contains the groups downstream of it, and that is
+what keeps the rule consistent — a group's check set is a subset of the check set
+of anything that reaches it, so a group that dies takes everything downstream
+with it. The reverse does not hold: `c` can die while `a` and `b` live on.
 
 On a standard board, where every binding is mutual, this is exactly ordinary Go:
 groups are the ordinary blocks, and the check set having no empty point is the

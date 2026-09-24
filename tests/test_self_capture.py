@@ -65,20 +65,42 @@ def test_a_multi_stone_group_self_captures_whole(grid5):
     assert board.get("B1") is Color.EMPTY
 
 
-def test_capturing_does_not_necessarily_save_the_played_stone():
-    """The motivating shape: a white ring with one stone swapped for black."""
+def test_a_chain_shares_its_fate():
+    """White 1 reaches 3 reaches 2, so all three are one group and die together.
+
+    Under the mutual-reachability rule this used to be three separate groups and
+    only the tail died -- black at 0 bound to it directly.
+    """
     board = ring4()
     board.set_position([(1, Color.WHITE), (2, Color.WHITE), (3, Color.WHITE)])
 
     result = board.place(0, Color.BLACK)
 
-    # Black at 0 kills white 2, because 2 binds to 0...
-    assert result.captured == (2,)
-    # ...but 0's own only binding is to white 1, which is no help at all, so the
-    # black stone dies too. Capturing bought it nothing.
-    assert result.self_captured == (0,)
+    assert sorted(result.captured) == [1, 2, 3]
+    assert result.self_captured == (), "taking white 1 hands black a liberty there"
+    assert board.stone_count(Color.WHITE) == 0
+    assert board.get(0) is Color.BLACK
+
+
+def test_capturing_does_not_necessarily_save_the_played_stone():
+    """A move can take a stone and still cost you the one you played.
+
+    Black P binds only to white Q, so P lives or dies by Q. P also happens to be
+    what white W leans on, so playing P kills W -- but taking W buys P nothing,
+    because P never binds to W.
+    """
+    graph = custom_graph(["P", "Q", "W"], [])
+    graph.bind("W", "P", directed=True)
+    graph.bind("P", "Q", directed=True)
+
+    board = Board(graph)
+    board.set_position([(graph.id_of("W"), Color.WHITE), (graph.id_of("Q"), Color.WHITE)])
+
+    result = board.place("P", Color.BLACK)
+
+    assert [graph.label_of(v) for v in result.captured] == ["W"]
+    assert [graph.label_of(v) for v in result.self_captured] == ["P"]
     assert board.stone_count(Color.BLACK) == 0
-    assert board.stone_count(Color.WHITE) == 2
 
 
 def test_capturing_does_save_you_when_the_taken_stone_was_your_liberty(grid19):

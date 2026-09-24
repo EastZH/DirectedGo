@@ -63,24 +63,31 @@ def test_a_stone_with_no_bindings_is_dead():
     assert board.stone_count() == 0
 
 
-def test_one_way_binding_to_a_friend_props_it_up_without_being_a_liberty():
+def test_reaching_a_friend_puts_it_in_your_group():
+    """Following a one-way binding to a friend makes that friend part of your
+    group, so its liberties become yours.
+
+    The rule this replaced kept the two *separate*: the friend sat in the check
+    set and kept you alive without being a liberty, so a stone could be alive
+    with none. Under reachability there is no such state -- reach a stone and
+    you share its fate, liberties included.
+    """
     graph = custom_graph(["A", "B", "X"], [])
     graph.bind("A", "B", directed=True)  # A leans on B, one way only
-    graph.bind("B", "X", directed=True)  # B needs something to breathe with
+    graph.bind("B", "X", directed=True)  # B has a liberty of its own
 
     board = Board(graph)
     board.place("B", Color.BLACK)
     board.place("A", Color.BLACK)
 
-    # A's only outgoing binding is to a friendly stone, so it has no liberties
-    # at all...
-    assert board.liberties("A") == frozenset()
-    # ...yet it is alive, because a friend sits in its check set.
+    a, b, x = (graph.id_of(s) for s in ("A", "B", "X"))
+    assert board.group("A") == frozenset({a, b})
+    assert board.liberties("A") == frozenset({x}), "A inherits B's liberty"
     assert not board.is_captured(board.group("A"))
-    # And it is *not* merged with B: the binding is one-way.
-    assert board.group("A") == frozenset({graph.id_of("A")})
-    # B, meanwhile, gets nothing from A.
-    assert board.group_check_set(board.group("B")) == frozenset({graph.id_of("X")})
+
+    # Membership is one-way, though: B does not reach A.
+    assert board.group("B") == frozenset({b})
+    assert board.group_check_set(board.group("B")) == frozenset({x})
 
 
 def test_the_binding_direction_decides_who_dies():
@@ -217,7 +224,7 @@ def test_the_square_from_the_exported_file_is_dead():
     assert sum(len(g) for g in board.dead_groups()) == 4
 
 
-def test_a_ring_only_closes_within_one_colour():
+def test_reachability_only_carries_within_one_colour():
     """Opposite colours must not merge, or ordinary Go would break."""
     graph = custom_graph(["A", "B", "C", "E"], [])
     graph.bind("A", "B", directed=True)
@@ -228,9 +235,11 @@ def test_a_ring_only_closes_within_one_colour():
     board = Board(graph)
     board.set_position([(0, Color.BLACK), (1, Color.WHITE), (2, Color.BLACK)])
 
-    # Only C -> A stays inside the black stones, so nothing closes.
+    # Black stones: only C -> A survives the colour filter, so A reaches nothing
+    # and C reaches A. The white B in the middle stops both chains.
     assert board.group(0) == frozenset({0})
-    assert board.group(2) == frozenset({2})
+    assert board.group(2) == frozenset({0, 2})
+    assert board.group(1) == frozenset({1})
 
 
 def test_differently_coloured_mutual_bindings_do_not_merge(grid5):
