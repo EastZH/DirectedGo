@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>graphgo — 图围棋编辑器</title>
+<style>
+  :root {
+    --bg: #12161c;
+    --panel: #1a2029;
+    --line: #2c3543;
+    --text: #dfe6ee;
+    --dim: #8b98a9;
+    --sel: #f2c94c;
+    --out: #4a9eff;
+    --in: #a78bfa;
+    --ko: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 13px/1.5 ui-sans-serif, "Segoe UI", "Microsoft YaHei", sans-serif;
+    display: flex; overflow: hidden;
+  }
+  #stage-wrap { flex: 1; position: relative; min-width: 0; }
+  svg { display: block; width: 100%; height: 100%; cursor: crosshair; }
+  svg.panning { cursor: grabbing; }
+
+  /* --- 连线：颜色是两端点色的渐变，双向共用一根，单向带箭头 --- */
+  .edge { fill: none; stroke-linecap: round; stroke-width: 1.6; }
+  .edge.hot { stroke-width: 3.4; }
+  .edge.dim { opacity: 0.1; }
+
+  /* --- 点与棋子 --- */
+  /* 所有点长一个样：盘上原有的和你后加的没有区别。每个点自己的颜色是在脚本
+     里按坐标算的（见 pointColor），所以这里不设 fill —— 样式表里的 fill 会
+     盖掉元素上的属性。 */
+  .pt { stroke: var(--panel); stroke-width: 1; }
+  .pt.sel { stroke: var(--sel); stroke-width: 3; }
+  .pt.hot { stroke: #fff; stroke-width: 2.5; }
+  .pt.dim { opacity: 0.25; }
+  .stone { stroke-width: 1; }
+  .stone.B { fill: #0e1218; stroke: #55637a; }
+  .stone.W { fill: #e9edf2; stroke: #97a4b6; }
+  /* 死子：按规则该被提掉，但还没被提（改绑定或导入之后才会出现） */
+  .stone.dead { stroke: var(--ko); stroke-width: 2; stroke-dasharray: 3 2; }
+  .ko { fill: none; stroke: var(--ko); stroke-width: 2; }
+
+  #panel {
+    width: 320px; flex: none; background: var(--panel);
+    border-left: 1px solid var(--line); padding: 14px;
+    overflow-y: auto; display: flex; flex-direction: column; gap: 13px;
+  }
+  h1 { font-size: 14px; margin: 0; letter-spacing: .3px; }
+  h1 small { color: var(--dim); font-weight: 400; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+       color: var(--dim); margin: 0 0 7px; font-weight: 600; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .modes.three { grid-template-columns: 1fr 1fr 1fr; }
+  .row { display: flex; gap: 6px; align-items: center; }
+  button {
+    font: inherit; color: var(--text); background: #232c38;
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 7px 9px; cursor: pointer; text-align: center;
+  }
+  button:hover:not(:disabled) { background: #2b3644; }
+  button.on { background: #2f6fd0; border-color: #4a86e0; color: #fff; }
+  button:disabled { opacity: .38; cursor: default; }
+  button.wide { width: 100%; }
+  button kbd { color: var(--dim); font: inherit; font-size: 11px; }
+  button.on kbd { color: #cfe0ff; }
+  input[type=number] {
+    font: inherit; width: 100%; min-width: 0; color: var(--text);
+    background: #12161c; border: 1px solid var(--line);
+    border-radius: 6px; padding: 7px 8px;
+  }
+  label.chk { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .stats { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; }
+  .stats b { font-weight: 600; }
+  .stats span { color: var(--dim); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip {
+    background: #232c38; border: 1px solid var(--line); border-radius: 4px;
+    padding: 2px 6px; cursor: pointer; font-family: ui-monospace, monospace; font-size: 12px;
+  }
+  .chip:hover { background: #2b3644; }
+  .chip.out { border-color: var(--out); }
+  .chip.in  { border-color: var(--in); }
+  .empty { color: var(--dim); font-style: italic; }
+  .note { color: var(--dim); font-size: 12px; margin-top: 6px; }
+  #hint { color: var(--dim); min-height: 34px; border-top: 1px solid var(--line); padding-top: 11px; }
+  details { border-top: 1px solid var(--line); padding-top: 11px; }
+  summary { cursor: pointer; font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+            color: var(--dim); font-weight: 600; list-style: none; user-select: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸ "; }
+  details[open] summary::before { content: "▾ "; }
+  details .body { padding-top: 9px; display: flex; flex-direction: column; gap: 7px; }
+  #status { border-top: 1px solid var(--line); padding-top: 11px; color: var(--dim); min-height: 20px; }
+  #status.err { color: #ff8080; }
+  #readout { position: absolute; left: 10px; bottom: 10px; color: var(--dim);
+             font-family: ui-monospace, monospace; pointer-events: none; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="stage-wrap">
+  <svg id="stage">
+    <defs>
+      <!-- userSpaceOnUse: 箭头是固定像素大小，缩放时不会跟着变粗。
+           context-stroke 让箭头跟着线末端那一截的颜色走，所以渐变的线也能有
+           同色的箭头（需要 Chrome 97+ / Firefox 68+ / Safari 16.4+）。 -->
+      <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4"
+              markerWidth="8" markerHeight="8" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L8,4 L0,8 Z" style="fill: context-stroke"/>
+      </marker>
+    </defs>
+    <!-- 每条边的渐变都在这里现建，见 render() -->
+    <defs id="gradients"></defs>
+    <g id="edges"></g>
+    <g id="points"></g>
+    <g id="stones"></g>
+    <g id="markers"></g>
+  </svg>
+  <div id="readout"></div>
+</div>
+
+<div id="panel">
+  <h1>graphgo <small>图围棋编辑器</small></h1>
+
+  <div class="modes">
+    <button id="undo" disabled>撤销 <kbd>^Z</kbd></button>
+    <button id="redo" disabled>重做 <kbd>^Y</kbd></button>
+  </div>
+
+  <div>
+    <h2>棋子</h2>
+    <div class="modes">
+      <button data-mode="play" class="on">落子</button>
+      <button data-mode="edit">编辑</button>
+    </div>
+    <div class="row" id="stone-row" style="margin-top:9px">
+      <button data-stone="B" style="flex:1">黑</button>
+      <button data-stone="W" style="flex:1">白</button>
+      <button data-stone="" style="flex:1">空</button>
+    </div>
+    <div class="note" id="stone-note"></div>
+    <button class="wide hidden" id="settle" style="margin-top:7px">提掉死子</button>
+  </div>
+
+  <div>
+    <h2>图结构</h2>
+    <div class="modes">
+      <button data-mode="bind">连线</button>
+      <button data-mode="unbind">删绑定</button>
+      <button data-mode="remove">删点</button>
+      <button data-mode="pan">平移</button>
+    </div>
+    <label class="chk hidden" id="directed-row" style="margin-top:9px">
+      <input type="checkbox" id="directed"> 单向（A → B，带箭头）
+    </label>
+  </div>
+
+  <div id="hint"></div>
+
+  <details>
+    <summary>加点 · 输入坐标</summary>
+    <div class="body">
+      <div class="row">
+        <input type="number" id="nx" value="25" step="1" aria-label="x 坐标">
+        <input type="number" id="ny" value="25" step="1" aria-label="y 坐标">
+        <button id="addpt" style="flex:none">加点</button>
+      </div>
+      <div class="note">盘上 19×19 是 x,y ∈ 0…18，y 向上。回车也能加。</div>
+    </div>
+  </details>
+
+  <details>
+    <summary>棋盘 · 尺寸与文件</summary>
+    <div class="body">
+      <div class="row">
+        <span style="color:var(--dim);flex:none">边长</span>
+        <input type="number" id="bsize" value="19" min="0" max="19" step="1">
+      </div>
+      <div class="note">0 = 空平面，1 = 一个点，19 = 标准盘。改动立刻重来，可撤销。</div>
+      <label class="chk">
+        <input type="checkbox" id="wired" checked> 带线（相邻的点互相绑定）
+      </label>
+      <button class="wide" id="clearstones">清除棋子（保留绑定）</button>
+      <button class="wide" id="export">导出 JSON</button>
+      <button class="wide" id="import">导入 JSON</button>
+      <input type="file" id="file" accept=".json,application/json" hidden>
+      <button class="wide" id="fit">适应窗口</button>
+    </div>
+  </details>
+
+  <div>
+    <h2>统计</h2>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div>
+    <h2>选中</h2>
+    <div id="inspect"></div>
+  </div>
+
+  <div id="status"></div>
+</div>
+
+<script>
+"use strict";
+
+const POINT_R = 4;
+// 适应窗口时的缩放上限。没有它，一个只跨 1 个单位的四点小图会被放大到
+// 相邻两点相距 600+ px，看上去就是几个散落的点加几根发丝线 —— 而 19×19
+// 恰好落在合理区间，所以这个毛病只在小图上露出来。
+const MAX_FIT_ZOOM = 100;
+const HINTS = {
+  play:   "点交叉点落子，黑白交替。提子、以及自己这块活不活得成，都由规则引擎处理。",
+  edit:   "选黑/白/空，点一个点直接改它的子。不判规则、不提子 —— 这是摆局面。",
+  bind:   "点一个点选中，再点另一个点连线。勾上「单向」就是 A → B。",
+  unbind: "点两个点，删掉它们之间的绑定（两个方向一起删）。",
+  remove: "点一个点把它删掉，连带它的所有绑定和棋子。",
+  pan:    "按住拖动平移画布，滚轮缩放。",
+};
+// 让后端的异常类名说人话。
+const ERROR_TEXT = {
+  OccupiedError: "这个点已经有子了",
+  KoError:       "打劫，不能立刻回提",
+  OutOfBoundsError: "这个点不存在（可能已经被删了）",
+  GraphGoError:  "",
+};
+const friendly = (data) => ERROR_TEXT[data.kind] || data.error;
+
+const svg = document.getElementById("stage");
+const edgesG = document.getElementById("edges");
+const pointsG = document.getElementById("points");
+const stonesG = document.getElementById("stones");
+const markersG = document.getElementById("markers");
+const readout = document.getElementById("readout");
+const undoBtn = document.getElementById("undo");
+const redoBtn = document.getElementById("redo");
+
+let state = { points: [], bindings: [], spacing: 1, ko: null, stats: {} };
+let view = { k: 30, ox: 0, oy: 0 };
+let mode = "play";
+let paintStone = "B";    // 编辑模式涂什么：'B' / 'W' / ''（空）
+let selected = null;
+let hovered = null;
+let edgeEls = [];
+let pointEls = new Map();
+let dragging = null;
+
+const NS = "http://www.w3.org/2000/svg";
+const el = (name, attrs = {}) => {
+  const node = document.createElementNS(NS, name);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  return node;
+};
+
+/* ---------- 坐标 ---------- */
+const toPixels = (p) => ({ x: view.ox + view.k * p.x, y: view.oy - view.k * p.y });
+const toPlane = (mx, my) => ({ x: (mx - view.ox) / view.k, y: -(my - view.oy) / view.k });
+const svgPoint = (evt) => {
+  const r = svg.getBoundingClientRect();
+  return { x: evt.clientX - r.left, y: evt.clientY - r.top };
+};
+const label = (id) => {
+  const p = state.points.find((q) => q.id === id);
+  return p ? p.label : String(id);
+};
+// 棋子半径跟着缩放走，但不能大到盖住邻点。
+const stoneRadius = () => Math.min(view.k * 0.46, 16);
+const hitRadius = () => Math.max(POINT_R + 5, stoneRadius() + 2);
+
+/* ---------- 曲线：把叠在一起的绑定扇开 ---------- */
+/* 两条线落在同一段上时，后画的会把先画的完全盖住，看起来就只剩一条。这跟它们
+   从哪里出发无关，所以这里按【几何】分组，不看出发点：
+     1. 先归到同一条直线上（方向取 0..π —— 谁指向谁无所谓，A1->J9 和 J9->B2
+        是同一条对角线，只是方向相反，也要算一条线）；
+     2. 再把沿这条线【区间真的重叠】的边串成一串；
+     3. 同一串里每条各自弯一点，扇成一束。
+   只共线、区间不重叠的（棋盘上首尾相接的格子边）互相碰不到，保持笔直 ——
+   所以标准盘画出来还是规规矩矩的格子。 */
+const LINE_ANGLE_TOL = 0.25 * Math.PI / 180;   // 角度量化粒度
+const LINE_DIST_TOL = 0.5;                     // 垂距量化粒度（像素）
+const OVERLAP_TOL = 2;                         // 区间至少重叠这么多像素才算压住
+const FAN_GAP = 26;                            // 单独让开时的弯度（像素）
+const FAN_MAX_WIDTH = 70;                      // 一束最多扇开这么宽
+
+function fanOffsets(segs, points) {
+  const offsets = new Array(segs.length).fill(0);
+
+  // 1. 每条边归到哪条直线上。方向统一折到 0..π，两个朝向会落到同一个值。
+  const lines = new Map();
+  segs.forEach((seg, i) => {
+    let ang = Math.atan2(seg.uy, seg.ux);
+    if (ang < 0) ang += Math.PI;
+    if (ang >= Math.PI) ang -= Math.PI;
+    const dist = seg.p1.x * -Math.sin(ang) + seg.p1.y * Math.cos(ang);
+    const key = Math.round(ang / LINE_ANGLE_TOL) + "|" + Math.round(dist / LINE_DIST_TOL);
+    if (!lines.has(key)) lines.set(key, []);
+    lines.get(key).push(i);
+  });
+
+  for (const indices of lines.values()) {
+    // 这里不能因为"这条线上只有一根边"就跳过：单独一根长线压着一串点，一样会
+    // 被看成好几段，它同样需要让开。
+    const first = segs[indices[0]];
+    let ang = Math.atan2(first.uy, first.ux);
+    if (ang < 0) ang += Math.PI;
+    const ux = Math.cos(ang), uy = Math.sin(ang);
+    const lineDist = first.p1.x * -uy + first.p1.y * ux;
+
+    // 这条线上还压着哪些点。一根长线正好从中间那些点上穿过去，画出来就像被切成
+    // 了好几段 —— 必须让它偏出去，才看得出这是一根而不是一链。
+    const onLine = [];
+    for (const p of points) {
+      if (Math.abs(p.x * -uy + p.y * ux - lineDist) > LINE_DIST_TOL) continue;
+      onLine.push(p.x * ux + p.y * uy);
+    }
+
+    const spans = indices.map((i) => {
+      const seg = segs[i];
+      const t0 = seg.p1.x * ux + seg.p1.y * uy;
+      const t1 = seg.p2.x * ux + seg.p2.y * uy;
+      const lo = Math.min(t0, t1), hi = Math.max(t0, t1);
+      return {
+        i, seg, lo, hi,
+        // 反向的边，它自己的垂线是反的，弯度也要跟着翻号才能朝同一边。
+        flip: seg.ux * ux + seg.uy * uy < 0 ? -1 : 1,
+        // 中间压着别的点：这一根不许留在 0 上贴着走。
+        holds: onLine.some((t) => t > lo + OVERLAP_TOL && t < hi - OVERLAP_TOL),
+      };
+    });
+    spans.sort((a, b) => a.lo - b.lo);
+
+    // 2. 沿直线扫，区间交叠的串在一起。整串长度为 n 时统一算间距，
+    //    免得八十条边挤成一片时扇出半个屏幕。
+    let run = [spans[0]];
+    let runEnd = spans[0].hi;
+    const flush = () => {
+      if (!run.length) return;
+      if (run.length === 1 && !run[0].holds) return;   // 一根、又不压着点，不用动
+      // 短的先挑位置。格子上的短线大多首尾相接、互不相交，于是都留在 0 上笔直；
+      // 只有真正被压住的那根才让开。A1->A19 横穿 18 根格子短线时，动的是那根
+      // 长的，短线一根不动 —— 反过来让 18 根短线各弯 35 像素就全是乱抖了。
+      const taken = [];              // 已占位的 span，按放置顺序
+      let widest = 0;
+      for (const span of run.slice().sort((a, b) => a.seg.len - b.seg.len)) {
+        const used = new Set();
+        for (const other of taken) {
+          if (Math.min(span.hi, other.hi) - Math.max(span.lo, other.lo) > OVERLAP_TOL) {
+            used.add(other.slot);
+          }
+        }
+        // 中间压着别的点的不许留在 0 上：贴着走就会看起来像被切成了几段。
+        let slot = span.holds ? 1 : 0;
+        while (used.has(slot)) slot = slot > 0 ? -slot : 1 - slot;   // 1, -1, 2, -2…
+        span.slot = slot;
+        taken.push(span);
+        widest = Math.max(widest, Math.abs(slot));
+      }
+      // 上限管的是整束的宽度，偏移从 -widest 铺到 +widest，所以除以 2*widest。
+      const gap = widest ? Math.min(FAN_GAP, FAN_MAX_WIDTH / (2 * widest)) : 0;
+      for (const span of run) offsets[span.i] = span.slot * gap * span.flip;
+    };
+    for (let k = 1; k < spans.length; k++) {
+      if (spans[k].lo < runEnd - OVERLAP_TOL) {
+        run.push(spans[k]);
+        runEnd = Math.max(runEnd, spans[k].hi);
+      } else {
+        flush();
+        run = [spans[k]];
+        runEnd = spans[k].hi;
+      }
+    }
+    flush();
+  }
+  return offsets;
+}
+
+/* ---------- 每个点一个颜色：位置到颜色的映射 ---------- */
+/* 每次打开页面随机挑一个通道定住不动，另外两个分别跟着 x 和 y 往上爬。挑中哪个
+   通道，出来的就是哪一种色系 —— 红定住偏暖灰、绿定住偏紫、蓝定住偏黄。
+
+   颜色于是只是坐标的函数 —— 跟"第几个点"无关，所以撤销、重做、导入都不会让
+   颜色跳。
+
+   背景是暗的，所以哪个通道都不低于 FLOOR：最暗的一种是 rgb(104,104,104)，亮度
+   约 104，背景约 22，分得开。要走的那两个通道另外还压在偏低的区间里，好给攀升
+   留出空间；爬到最远处也只差一点点到顶，不会溢出。 */
+const FLOOR = 104;
+const rand = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+
+const HELD = Math.floor(Math.random() * 3);          // 0=R, 1=G, 2=B，定住哪个
+const FREE = [0, 1, 2].filter((i) => i !== HELD);    // 这两个跟着位置走
+const BASE = [0, 1, 2].map((i) =>
+  i === HELD
+    ? rand(FLOOR, 210)            // 定住的那个可以随便亮
+    : rand(FLOOR, FLOOR + 40));   // 要走的那两个得留出攀升的余地
+
+function colorField(points) {
+  if (!points.length) return { span: 1, x0: 0, y0: 0 };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const span = Math.max(maxX - minX, maxY - minY, 1);
+  // 记录 span+1 而不是 span：两端才落在这段范围里面，不会首尾撞成同色。
+  return { span: span + 1, x0: minX, y0: minY };
+}
+
+function pointColor(p, field) {
+  const climb = (base, value, origin) =>
+    base + Math.round((value - origin) * (255 - base) / field.span);
+  const rgb = BASE.slice();
+  rgb[FREE[0]] = climb(BASE[FREE[0]], p.x, field.x0);   // 一个通道跟 x
+  rgb[FREE[1]] = climb(BASE[FREE[1]], p.y, field.y0);   // 另一个跟 y
+  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+}
+
+/* ---------- 渲染 ---------- */
+function render() {
+  const byId = new Map(state.points.map((p) => [p.id, p]));
+  edgesG.replaceChildren();
+  pointsG.replaceChildren();
+  stonesG.replaceChildren();
+  markersG.replaceChildren();
+  edgeEls = [];
+  pointEls = new Map();
+
+  // 先算每条边的像素端点，再决定各自弯多少。
+  const segs = [];
+  for (const b of state.bindings) {
+    const A = byId.get(b.a), B = byId.get(b.b);
+    if (!A || !B) continue;
+    const p1 = toPixels(A), p2 = toPixels(B);
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1) continue;
+    segs.push({ b, p1, p2, len, ux: dx / len, uy: dy / len });
+  }
+
+  const field = colorField(state.points);
+  const colors = new Map(state.points.map((p) => [p.id, pointColor(p, field)]));
+  const gradients = document.getElementById("gradients");
+  gradients.replaceChildren();
+
+  // 线在最下，然后是点，棋子压在最上面。
+  const offsets = fanOffsets(segs, state.points.map(toPixels));
+  segs.forEach((seg, i) => {
+    const head = seg.b.directed ? POINT_R + 10 : POINT_R + 2;
+    if (seg.len <= POINT_R + 1 + head) return;      // 太短就不画
+    const x1 = seg.p1.x + seg.ux * (POINT_R + 1);
+    const y1 = seg.p1.y + seg.uy * (POINT_R + 1);
+    const x2 = seg.p2.x - seg.ux * head;
+    const y2 = seg.p2.y - seg.uy * head;
+    // 控制点沿垂直方向推出去，把线弯成弧。
+    const cx = (x1 + x2) / 2 - seg.uy * offsets[i];
+    const cy = (y1 + y2) / 2 + seg.ux * offsets[i];
+
+    // 一条线一份渐变，从起点色走到终点色。必须 userSpaceOnUse：默认的
+    // objectBoundingBox 是沿外框左右走的，竖着的线也会变成左右渐变。
+    const gid = "grad" + i;
+    const ramp = el("linearGradient", {
+      id: gid, gradientUnits: "userSpaceOnUse", x1, y1, x2, y2,
+    });
+    ramp.appendChild(el("stop", { offset: "0", "stop-color": colors.get(seg.b.a) }));
+    ramp.appendChild(el("stop", { offset: "1", "stop-color": colors.get(seg.b.b) }));
+    gradients.appendChild(ramp);
+
+    const path = el("path", {
+      d: `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`,
+      class: "edge",
+      stroke: `url(#${gid})`,
+    });
+    if (seg.b.directed) path.setAttribute("marker-end", "url(#arrow)");
+    edgesG.appendChild(path);
+    edgeEls.push({ el: path, a: seg.b.a, b: seg.b.b });
+  });
+
+  const sr = stoneRadius();
+  for (const p of state.points) {
+    const s = toPixels(p);
+    const circle = el("circle", {
+      cx: s.x, cy: s.y, r: POINT_R,
+      class: "pt" + (p.id === selected ? " sel" : ""),
+      fill: colors.get(p.id),
+    });
+    pointsG.appendChild(circle);
+    pointEls.set(p.id, circle);
+
+    if (p.stone) {
+      stonesG.appendChild(el("circle", {
+        cx: s.x, cy: s.y, r: sr,
+        class: "stone " + p.stone + (p.dead ? " dead" : ""),
+      }));
+    }
+  }
+
+  if (state.ko !== null && byId.has(state.ko)) {
+    const s = toPixels(byId.get(state.ko));
+    markersG.appendChild(el("circle", { cx: s.x, cy: s.y, r: sr * 0.42, class: "ko" }));
+  }
+
+  applyHighlight();
+  renderPanel();
+  syncStoneUI();
+}
+
+function applyHighlight() {
+  const focus = hovered ?? (state.points.some((p) => p.id === selected) ? selected : null);
+  for (const { el: line, a, b } of edgeEls) {
+    line.classList.remove("hot", "dim");
+    if (focus === null) continue;
+    // 方向由箭头表示，所以这里只分"跟这个点有关"和"无关"两档。
+    if (a === focus || b === focus) line.classList.add("hot");
+    else line.classList.add("dim");
+  }
+  for (const [id, circle] of pointEls) {
+    circle.classList.toggle("hot", id === hovered);
+    circle.classList.toggle("dim", focus !== null && id !== focus && !touches(focus, id));
+  }
+}
+
+function touches(focus, id) {
+  return state.bindings.some(
+    (b) => (b.a === focus && b.b === id) || (b.b === focus && b.a === id)
+  );
+}
+
+/* 落子固定黑白交替：轮到谁由后端记着（state.turn），所以撤销、重做、导入
+   之后都不会错位 —— 客户端自己数会数歪。编辑模式不轮替，直接选涂什么。 */
+function syncStoneUI() {
+  const playing = mode === "play";
+  const shown = playing ? (state.turn || "B") : paintStone;
+
+  document.querySelectorAll("[data-stone]").forEach((b) => {
+    b.classList.toggle("on", b.dataset.stone === shown);
+    // 「空」只有编辑模式用得上。
+    if (b.dataset.stone === "") b.classList.toggle("hidden", playing);
+  });
+
+  document.getElementById("stone-note").textContent = playing
+    ? `轮到${state.turn === "W" ? "白" : "黑"} · 点黑/白可以把这一手交给它`
+    : "编辑不判规则、不提子";
+
+  // 死子只可能来自编辑、改绑定或导入 —— 合法对局到不了这种局面。
+  const dead = state.stats.dead || 0;
+  const settle = document.getElementById("settle");
+  settle.disabled = dead === 0;
+  settle.textContent = dead ? `提掉死子（${dead}）` : "提掉死子";
+}
+
+function renderPanel() {
+  const s = state.stats;
+  document.getElementById("stats").innerHTML = `
+    <b>${s.points}</b><span>个点</span>
+    <b>${s.black} / ${s.white}</b><span>黑 / 白 子</span>
+    ${s.dead ? `<b style="color:var(--ko)">${s.dead}</b><span style="color:var(--ko)">颗死子（改绑定或导入留下的）</span>` : ""}
+    <b>${s.mutual}</b><span>条双向绑定（一根线）</span>
+    <b>${s.one_way}</b><span>条单向绑定（带箭头）</span>`;
+
+  const box = document.getElementById("inspect");
+  const p = state.points.find((q) => q.id === selected);
+  if (!p) {
+    box.innerHTML = '<div class="empty">没有选中点。点一个点看看它的绑定。</div>';
+    return;
+  }
+  const outgoing = state.bindings.filter(
+    (b) => (b.directed ? b.a === selected : (b.a === selected || b.b === selected))
+  );
+  const incoming = state.bindings.filter((b) => b.directed && b.b === selected);
+  const other = (b) => (b.a === selected ? b.b : b.a);
+  const chips = (list, cls) => list.length
+    ? list.map((b) => `<span class="chip ${cls}" data-go="${other(b)}">${label(other(b))}</span>`).join("")
+    : '<span class="empty">无</span>';
+  const stoneName = { B: "黑子", W: "白子" }[p.stone] || "空";
+
+  box.innerHTML = `
+    <div style="margin-bottom:6px">
+      <b>${p.label}</b>
+      <span class="empty"> (${p.x}, ${p.y}) · ${stoneName}</span>
+    </div>
+    <div style="color:var(--out);margin:4px 0 3px">绑定出去（箭头朝外）</div>
+    <div class="chips">${chips(outgoing, "out")}</div>
+    <div style="color:var(--in);margin:8px 0 3px">被人绑定（箭头朝里）</div>
+    <div class="chips">${chips(incoming, "in")}</div>`;
+
+  box.querySelectorAll("[data-go]").forEach((chip) => {
+    chip.onclick = () => { selected = Number(chip.dataset.go); render(); };
+  });
+}
+
+/* ---------- 与后端说话 ---------- */
+const setStatus = (text, isError) => {
+  const node = document.getElementById("status");
+  node.textContent = text;
+  node.classList.toggle("err", !!isError);
+};
+
+async function act(action) {
+  let data;
+  try {
+    const res = await fetch("/api/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(action),
+    });
+    data = await res.json();
+  } catch (err) {
+    setStatus("连不上后端：" + err, true);
+    return null;
+  }
+  if (!data.ok) { setStatus(friendly(data), true); return null; }
+  state = data.state;
+  if (!state.points.some((p) => p.id === selected)) selected = null;
+  undoBtn.disabled = !data.can_undo;
+  redoBtn.disabled = !data.can_redo;
+  render();
+  return data;
+}
+
+/* ---------- 点击 ---------- */
+function handleClick(hitId) {
+  if (mode === "play" || mode === "edit") {
+    if (hitId === null) { selected = null; render(); return; }
+    if (mode === "play") {
+      const color = state.turn || "B";     // 黑白交替，没得挑
+      act({ op: "play", v: hitId, color }).then((d) => {
+        if (!d) return;
+        const parts = [`${color === "B" ? "黑" : "白"}下 ${label(hitId)}`];
+        if (d.captured.length) parts.push(`提掉 ${d.captured.length} 子`);
+        // 允许自杀：能提子也未必救得了自己。
+        if (d.self_captured.length) parts.push(`自己死 ${d.self_captured.length} 子`);
+        setStatus(parts.join("，"));
+      });
+    } else {
+      const stone = paintStone;
+      const what = stone === "B" ? "黑" : (stone === "W" ? "白" : "空");
+      selected = hitId;                    // 顺便选中，方便看它的绑定
+      act({ op: "set_stone", v: hitId, color: stone })
+        .then((d) => d && setStatus(`${label(hitId)} 设为${what}`));
+    }
+    return;
+  }
+  if (mode === "pan") { selected = null; render(); return; }
+  if (mode === "remove") {
+    if (hitId === null) return;
+    act({ op: "remove_point", v: hitId })
+      .then((d) => d && setStatus(`删了点 ${d.label}，连带它的绑定和棋子`));
+    return;
+  }
+  if (hitId === null) { selected = null; render(); return; }
+  if (selected === null) {
+    selected = hitId; render(); setStatus(`选中 ${label(hitId)}，再点一个点`); return;
+  }
+  if (selected === hitId) { selected = null; render(); setStatus("取消选中"); return; }
+
+  const a = selected, b = hitId;
+  selected = null;
+  if (mode === "bind") {
+    const directed = document.getElementById("directed").checked;
+    act({ op: "bind", a, b, directed }).then((d) => d && setStatus(
+      directed ? `绑定 ${label(a)} → ${label(b)}（单向）`
+               : `绑定 ${label(a)} ↔ ${label(b)}（共用一根线）`));
+  } else {
+    act({ op: "unbind", a, b }).then((d) => d && setStatus(`删掉 ${label(a)} — ${label(b)} 的绑定`));
+  }
+}
+
+function hitTest(mx, my) {
+  const limit = hitRadius();
+  let best = null, bestD = limit;
+  for (const p of state.points) {
+    const s = toPixels(p);
+    const d = Math.hypot(s.x - mx, s.y - my);
+    if (d < bestD) { bestD = d; best = p.id; }
+  }
+  return best;
+}
+
+/* ---------- 视野 ---------- */
+function fitView() {
+  const r = svg.getBoundingClientRect();
+  if (!state.points.length) { view = { k: 30, ox: r.width / 2, oy: r.height / 2 }; return; }
+  const xs = state.points.map((p) => p.x), ys = state.points.map((p) => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const pad = 46;
+  const k = Math.min(
+    (r.width - 2 * pad) / Math.max(maxX - minX, 1),
+    (r.height - 2 * pad) / Math.max(maxY - minY, 1),
+    MAX_FIT_ZOOM
+  );
+  view = {
+    k,
+    ox: r.width / 2 - k * (minX + maxX) / 2,
+    oy: r.height / 2 + k * (minY + maxY) / 2,
+  };
+}
+
+/* ---------- 鼠标 ---------- */
+svg.addEventListener("mousedown", (evt) => {
+  const p = svgPoint(evt);
+  dragging = {
+    startX: p.x, startY: p.y, moved: false, ox: view.ox, oy: view.oy,
+    pan: evt.button === 1 || evt.shiftKey || mode === "pan",
+  };
+  if (dragging.pan) { svg.classList.add("panning"); evt.preventDefault(); }
+});
+
+svg.addEventListener("mousemove", (evt) => {
+  const m = svgPoint(evt);
+  const plane = toPlane(m.x, m.y);
+  readout.textContent = `(${plane.x.toFixed(1)}, ${plane.y.toFixed(1)})`;
+
+  if (dragging) {
+    const dx = m.x - dragging.startX, dy = m.y - dragging.startY;
+    if (Math.hypot(dx, dy) > 4) dragging.moved = true;
+    if (dragging.pan && dragging.moved) {
+      view.ox = dragging.ox + dx;
+      view.oy = dragging.oy + dy;
+      render();
+      return;
+    }
+  }
+
+  const hit = hitTest(m.x, m.y);
+  if (hit !== hovered) { hovered = hit; applyHighlight(); }
+});
+
+svg.addEventListener("mouseup", (evt) => {
+  svg.classList.remove("panning");
+  const d = dragging;
+  dragging = null;
+  if (!d || d.moved || d.pan) return;
+  const m = svgPoint(evt);
+  handleClick(hitTest(m.x, m.y));
+});
+
+svg.addEventListener("mouseleave", () => { hovered = null; applyHighlight(); });
+
+svg.addEventListener("wheel", (evt) => {
+  evt.preventDefault();
+  const m = svgPoint(evt);
+  const k1 = view.k;
+  const k2 = Math.min(240, Math.max(2, k1 * (evt.deltaY < 0 ? 1.12 : 1 / 1.12)));
+  view.ox = m.x - k2 * (m.x - view.ox) / k1;
+  view.oy = m.y - k2 * (m.y - view.oy) / k1;
+  view.k = k2;
+  render();
+}, { passive: false });
+
+/* ---------- 加点 ---------- */
+const addPoint = async () => {
+  const x = parseFloat(document.getElementById("nx").value);
+  const y = parseFloat(document.getElementById("ny").value);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) { setStatus("坐标必须是数字", true); return; }
+  const d = await act({ op: "add_point", x, y });
+  if (d) setStatus(`加了点 ${d.label} (${x}, ${y})`);
+};
+document.getElementById("addpt").onclick = addPoint;
+for (const id of ["nx", "ny"]) {
+  document.getElementById(id).addEventListener("keydown", (evt) => {
+    if (evt.key === "Enter") { evt.preventDefault(); addPoint(); }
+  });
+}
+
+/* ---------- 撤销 / 重做 / 文件 ---------- */
+const undo = async () => {
+  const d = await act({ op: "undo" });
+  if (d) { selected = null; render(); setStatus("已撤销"); }
+};
+const redo = async () => {
+  const d = await act({ op: "redo" });
+  if (d) { selected = null; render(); setStatus("已重做"); }
+};
+undoBtn.onclick = undo;
+redoBtn.onclick = redo;
+
+document.getElementById("clearstones").onclick = async () => {
+  const d = await act({ op: "clear_stones" });
+  if (d) setStatus("棋子已清空，绑定保留");
+};
+
+document.getElementById("settle").onclick = async () => {
+  const d = await act({ op: "settle" });
+  if (d) setStatus(d.removed.length ? `提掉 ${d.removed.length} 颗死子` : "没有死子");
+};
+
+document.getElementById("export").onclick = async () => {
+  const d = await act({ op: "export" });
+  if (!d) return;
+  const blob = new Blob([JSON.stringify(d.document, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "graphgo-plane.json";
+  a.click();
+  URL.revokeObjectURL(url);
+  const s = d.state.stats;
+  setStatus(`已导出 ${s.points} 个点、${s.mutual + s.one_way} 条绑定、${s.black + s.white} 颗子`);
+};
+
+const fileInput = document.getElementById("file");
+document.getElementById("import").onclick = () => fileInput.click();
+fileInput.onchange = async (evt) => {
+  const file = evt.target.files[0];
+  evt.target.value = "";                       // 允许重复导入同一个文件
+  if (!file) return;
+  let parsed;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch (err) {
+    setStatus("这个文件不是合法 JSON：" + err.message, true);
+    return;
+  }
+  const d = await act({ op: "load", document: parsed });
+  if (d) {
+    selected = null; fitView(); render();
+    const s = d.state.stats;
+    setStatus(`已导入 ${s.points} 个点、${s.mutual + s.one_way} 条绑定、${s.black + s.white} 颗子`);
+  }
+};
+
+/* 边长和「带线」都是改一下就重来 —— 用 change 而不是 input，免得输入 "19"
+   的中间过程先按 1 重来一次。整份重来是可撤销的。 */
+const sizeBox = document.getElementById("bsize");
+const wiredBox = document.getElementById("wired");
+
+const applyBoard = async () => {
+  const size = Math.max(0, Math.min(19, Math.round(Number(sizeBox.value) || 0)));
+  sizeBox.value = size;
+  const d = await act({ op: "reset", size, wired: wiredBox.checked });
+  if (!d) return;
+  selected = null;
+  fitView();
+  render();
+  const stats = d.state.stats;
+  setStatus(size === 0
+    ? "空平面"
+    : `${size}×${size}，${stats.points} 个点${wiredBox.checked ? "，带线" : "，不带线"}`);
+};
+sizeBox.onchange = applyBoard;
+wiredBox.onchange = applyBoard;
+document.getElementById("fit").onclick = () => { fitView(); render(); };
+
+/* ---------- 键盘 ---------- */
+window.addEventListener("keydown", (evt) => {
+  if (evt.key === "Escape") { selected = null; render(); return; }
+  if (evt.target instanceof HTMLInputElement) return;   // 别抢输入框的快捷键
+  if (!(evt.ctrlKey || evt.metaKey)) return;
+  const key = evt.key.toLowerCase();
+  if (key === "z") { evt.preventDefault(); (evt.shiftKey ? redo : undo)(); }
+  else if (key === "y") { evt.preventDefault(); redo(); }
+});
+
+/* ---------- 面板 ---------- */
+function updateModeUI() {
+  document.getElementById("hint").textContent = HINTS[mode] || "";
+  const stones = mode === "play" || mode === "edit";
+  document.getElementById("stone-row").classList.toggle("hidden", !stones);
+  document.getElementById("stone-note").classList.toggle("hidden", !stones);
+  document.getElementById("settle").classList.toggle("hidden", !stones);
+  document.getElementById("directed-row").classList.toggle("hidden", mode !== "bind");
+  svg.style.cursor = mode === "pan" ? "grab"
+    : (mode === "remove" ? "not-allowed"
+    : (stones ? "pointer" : "crosshair"));
+  syncStoneUI();
+}
+
+document.querySelectorAll("#panel [data-mode]").forEach((btn) => {
+  btn.onclick = () => {
+    mode = btn.dataset.mode;
+    selected = null;
+    document.querySelectorAll("#panel [data-mode]").forEach((b) => b.classList.toggle("on", b === btn));
+    updateModeUI();
+    render();
+  };
+});
+
+document.querySelectorAll("[data-stone]").forEach((btn) => {
+  btn.onclick = () => {
+    const stone = btn.dataset.stone;
+    paintStone = stone;
+    if (mode === "play") {
+      // 落子：点色块 = 把这一手交给它。下一手仍然交替（后端记轮次）。
+      if (stone === "") { syncStoneUI(); return; }
+      act({ op: "set_turn", color: stone }).then(
+        (d) => d && setStatus(`轮到${stone === "B" ? "黑" : "白"}`));
+      return;
+    }
+    syncStoneUI();
+  };
+});
+
+/* ---------- 启动 ---------- */
+updateModeUI();
+act({ op: "state" }).then(() => { fitView(); render(); setStatus("就绪"); });
+window.addEventListener("resize", () => render());
+</script>
+</body>
+</html>
