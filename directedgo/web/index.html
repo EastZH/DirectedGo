@@ -109,9 +109,8 @@
   <svg id="stage">
     <defs>
       <!-- userSpaceOnUse: 箭头是固定像素大小，缩放时不会跟着变粗。
-           context-stroke 让箭头继承线的颜色。单向线画的是起点的实色，所以
-           箭头也就自动是起点色，不用单独指定（需要 Chrome 97+ / Firefox 68+
-           / Safari 16.4+）。 -->
+           context-stroke 让箭头跟着线末端那一截的颜色走，所以渐变的线也能有
+           同色的箭头（需要 Chrome 97+ / Firefox 68+ / Safari 16.4+）。 -->
       <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4"
               markerWidth="8" markerHeight="8" orient="auto" markerUnits="userSpaceOnUse">
         <path d="M0,0 L8,4 L0,8 Z" style="fill: context-stroke"/>
@@ -465,28 +464,20 @@ function render() {
     const cx = (x1 + x2) / 2 - seg.uy * offsets[i];
     const cy = (y1 + y2) / 2 + seg.ux * offsets[i];
 
-    // 双向的线画成两端之间的渐变；单向的线用**起点**的实色。
-    // 单向如果也用渐变，走到末端就是终点的颜色，一眼看不出这根线是从哪来的。
-    let stroke;
-    if (seg.b.directed) {
-      stroke = colors.get(seg.b.a);
-    } else {
-      // 必须 userSpaceOnUse：默认的 objectBoundingBox 是沿外框左右走的，
-      // 竖着的线也会变成左右渐变。
-      const gid = "grad" + i;
-      const ramp = el("linearGradient", {
-        id: gid, gradientUnits: "userSpaceOnUse", x1, y1, x2, y2,
-      });
-      ramp.appendChild(el("stop", { offset: "0", "stop-color": colors.get(seg.b.a) }));
-      ramp.appendChild(el("stop", { offset: "1", "stop-color": colors.get(seg.b.b) }));
-      gradients.appendChild(ramp);
-      stroke = `url(#${gid})`;
-    }
+    // 一条线一份渐变，从起点色走到终点色。必须 userSpaceOnUse：默认的
+    // objectBoundingBox 是沿外框左右走的，竖着的线也会变成左右渐变。
+    const gid = "grad" + i;
+    const ramp = el("linearGradient", {
+      id: gid, gradientUnits: "userSpaceOnUse", x1, y1, x2, y2,
+    });
+    ramp.appendChild(el("stop", { offset: "0", "stop-color": colors.get(seg.b.a) }));
+    ramp.appendChild(el("stop", { offset: "1", "stop-color": colors.get(seg.b.b) }));
+    gradients.appendChild(ramp);
 
     const path = el("path", {
       d: `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`,
       class: "edge",
-      stroke,
+      stroke: `url(#${gid})`,
     });
     if (seg.b.directed) path.setAttribute("marker-end", "url(#arrow)");
     edgesG.appendChild(path);
