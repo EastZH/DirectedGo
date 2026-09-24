@@ -1,6 +1,6 @@
 """A local web server so a browser can look at, and edit, a Plane.
 
-Run it with ``python -m graphgo.server`` and open the printed URL. Only the
+Run it with ``python -m directedgo.server`` and open the printed URL. Only the
 standard library is used, and it binds to loopback by default -- this is a
 viewer for your own machine, not a service.
 
@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from .errors import GraphGoError
+from .errors import DirectedGoError
 from .plane import Plane
 
 __all__ = ["PlaneServer", "make_server", "serve"]
@@ -81,7 +81,7 @@ class PlaneServer:
         try:
             with self._lock:
                 return self._apply_locked(action)
-        except (GraphGoError, KeyError, TypeError, ValueError) as exc:
+        except (DirectedGoError, KeyError, TypeError, ValueError) as exc:
             # ``kind`` lets the browser say "自杀手，不能下" instead of showing a
             # Python class name at the user.
             kind = type(exc).__name__
@@ -92,7 +92,7 @@ class PlaneServer:
         before = self._plane.to_document() if op in self.MUTATING else None
         try:
             extra = self._dispatch(action)
-        except (GraphGoError, KeyError, TypeError, ValueError):
+        except (DirectedGoError, KeyError, TypeError, ValueError):
             if before is not None:
                 # Roll the plane back as well as the history bookkeeping: a
                 # rejected edit must leave everything exactly as it was.
@@ -177,14 +177,14 @@ class PlaneServer:
             wired = bool(action.get("wired", True))
             self._plane = Plane.blank() if size <= 0 else Plane.grid(size, wired=wired)
             return {}
-        raise GraphGoError(f"unknown op {op!r}")
+        raise DirectedGoError(f"unknown op {op!r}")
 
     def _step(
         self, source: list[dict[str, Any]], target: list[dict[str, Any]], empty_message: str
     ) -> dict[str, Any]:
         """Move one document between the undo and redo stacks."""
         if not source:
-            raise GraphGoError(empty_message)
+            raise DirectedGoError(empty_message)
         target.append(self._plane.to_document())
         self._plane = Plane.from_document(source.pop())
         return {}
@@ -260,7 +260,7 @@ def serve(
     url = f"http://{host}:{httpd.server_address[1]}/"
     stats = state.plane.snapshot()["stats"]
     # flush=True so the URL still shows up when stdout is redirected to a file.
-    print(f"graphgo 平面编辑器  ->  {url}", flush=True)
+    print(f"directedgo 平面编辑器  ->  {url}", flush=True)
     print(
         f"  {stats['points']} 个点, {stats['mutual']} 条双向绑定, "
         f"{stats['one_way']} 条单向绑定",
@@ -279,8 +279,8 @@ def serve(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m graphgo.server",
-        description="Serve an editable graphgo plane to the browser.",
+        prog="python -m directedgo.server",
+        description="Serve an editable directedgo plane to the browser.",
     )
     parser.add_argument("--host", default="127.0.0.1", help="interface to bind (default: loopback)")
     parser.add_argument("--port", type=int, default=8000, help="port (default: 8000; 0 picks a free one)")

@@ -12,7 +12,7 @@ from typing import Iterable
 
 from .board import Board, MoveResult
 from .colors import Color
-from .errors import GraphGoError
+from .errors import DirectedGoError
 from .graph import Graph
 from .topologies import square_grid
 
@@ -35,7 +35,7 @@ class Game:
         elif isinstance(graph, int) and not isinstance(graph, bool):
             graph = square_grid(graph, graph, torus=torus)
         if not isinstance(graph, Graph):
-            raise GraphGoError(f"expected a Graph or a board size, got {type(graph).__name__}")
+            raise DirectedGoError(f"expected a Graph or a board size, got {type(graph).__name__}")
 
         self.graph = graph
         self.board = Board(graph)
@@ -68,11 +68,11 @@ class Game:
         """Play a stone and hand the turn over.
 
         Raises ``IllegalMoveError`` (with the board untouched) if the move breaks
-        a rule, and ``GraphGoError`` if it is not that colour's turn.
+        a rule, and ``DirectedGoError`` if it is not that colour's turn.
         """
         color = self._to_play if color is None else Color(color)
         if color is not self._to_play:
-            raise GraphGoError(f"it is {self._to_play.name}'s turn, not {color.name}'s")
+            raise DirectedGoError(f"it is {self._to_play.name}'s turn, not {color.name}'s")
 
         snapshot = self.board.snapshot()
         result = self.board.place(vertex, color)
@@ -88,7 +88,7 @@ class Game:
         """Pass. Lifts the ko ban, as a pass is never a ko recapture."""
         color = self._to_play if color is None else Color(color)
         if color is not self._to_play:
-            raise GraphGoError(f"it is {self._to_play.name}'s turn, not {color.name}'s")
+            raise DirectedGoError(f"it is {self._to_play.name}'s turn, not {color.name}'s")
 
         self._history.append((self.board.snapshot(), self._to_play))
         self.board.pass_move()
@@ -102,7 +102,7 @@ class Game:
         exists, and restoring it would corrupt the board silently.
         """
         if not self._history:
-            raise GraphGoError("no move to undo")
+            raise DirectedGoError("no move to undo")
         snapshot, color = self._history.pop()
         self.board.restore(snapshot)
         self._to_play = color

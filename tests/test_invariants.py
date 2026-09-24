@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from graphgo import Board, Color, Graph, IllegalMoveError, square_grid
+from directedgo import Board, Color, Graph, IllegalMoveError, square_grid
 
 
 def random_connected_graph(rng: random.Random, n: int) -> Graph:

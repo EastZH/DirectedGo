@@ -1,4 +1,4 @@
-"""Exception hierarchy for graphgo.
+"""Exception hierarchy for directedgo.
 
 The split matters: ``OutOfBoundsError`` is an *addressing* mistake (you named a
 vertex that does not exist), while ``IllegalMoveError`` and its subclasses are
@@ -7,15 +7,15 @@ code routinely wants to catch the latter and let the former crash loudly.
 """
 
 
-class GraphGoError(Exception):
+class DirectedGoError(Exception):
     """Base class for everything this package raises."""
 
 
-class OutOfBoundsError(GraphGoError):
+class OutOfBoundsError(DirectedGoError):
     """A vertex id or label does not name a vertex in this graph."""
 
 
-class TopologyChangedError(GraphGoError):
+class TopologyChangedError(DirectedGoError):
     """A board snapshot was restored across an edge mutation.
 
     Snapshots record ``Graph.revision``; if the bindings changed in between, the
@@ -23,7 +23,7 @@ class TopologyChangedError(GraphGoError):
     """
 
 
-class IllegalMoveError(GraphGoError):
+class IllegalMoveError(DirectedGoError):
     """Base class for moves rejected by the rules."""
 
     def __init__(self, vertex=None, color=None, message=None):

@@ -1,4 +1,4 @@
-"""A guided tour of graphgo. Run it: ``python demo.py``
+"""A guided tour of directedgo. Run it: ``python demo.py``
 
 Nothing here is a test -- the tests live in ``tests/``. This is the hands-on
 version: play stones, watch a capture, then rewire the same board and watch the
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sys
 
-from graphgo import (
+from directedgo import (
     Board,
     Color,
     Game,
@@ -191,7 +191,7 @@ def main() -> None:
     if not sys.stdout.isatty():
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-    print("graphgo 演示：Vertex 不变，绑定可变")
+    print("directedgo 演示：Vertex 不变，绑定可变")
     section_1_play_on_the_standard_board()
     section_2_a_capture()
     section_3_same_position_different_bindings()

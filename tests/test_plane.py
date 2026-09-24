@@ -9,8 +9,8 @@ import urllib.request
 
 import pytest
 
-from graphgo import DOCUMENT_FORMAT, Color, GraphGoError, OutOfBoundsError, Plane
-from graphgo.server import PlaneServer, make_server
+from directedgo import Color, DOCUMENT_FORMAT, DirectedGoError, OutOfBoundsError, Plane
+from directedgo.server import PlaneServer, make_server
 
 #: (label, colour) placements that build a ko shape on a 5x5 board.
 KO_SETUP = [
@@ -101,7 +101,7 @@ def test_adding_a_point_after_a_rebuild_does_not_collide_on_a_label():
     assert rebuilt.graph.n == 13
     assert rebuilt.graph.label_of(12) == "13", "the label outlived the id it named"
 
-    v = rebuilt.add_point(99.0, 99.0)  # used to raise GraphGoError
+    v = rebuilt.add_point(99.0, 99.0)  # used to raise DirectedGoError
 
     assert v == 13
     assert rebuilt.graph.label_of(v) == "14", "the auto-label stepped past the one taken"
@@ -126,7 +126,7 @@ def test_labels_stay_unique_across_many_rebuilds_and_additions():
 
 def test_two_points_cannot_share_a_coordinate(plane):
     plane.add_point(30.0, 4.0)
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         plane.add_point(30.0, 4.0)
 
 
@@ -302,7 +302,7 @@ def test_the_move_can_be_taken_out_of_order(plane5):
 
 
 def test_the_move_cannot_belong_to_empty(plane5):
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         plane5.set_turn(Color.EMPTY)
 
 
@@ -408,9 +408,9 @@ def test_a_document_does_not_depend_on_ids(plane):
 
 
 def test_an_unknown_format_is_refused(plane):
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         Plane.from_document({"format": "something/else", "points": []})
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         Plane.from_document([1, 2, 3])  # type: ignore[arg-type]
 
 
@@ -420,7 +420,7 @@ def test_a_binding_pointing_nowhere_is_refused():
         "points": [{"x": 0, "y": 0}],
         "bindings": [{"a": 0, "b": 7, "directed": False}],
     }
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         Plane.from_document(document)
 
 
@@ -803,7 +803,7 @@ def test_the_browser_gets_a_page_and_json_over_real_http():
     try:
         with urllib.request.urlopen(base + "/", timeout=5) as response:
             page = response.read().decode("utf-8")
-        assert "<svg" in page and "graphgo" in page
+        assert "<svg" in page and "directedgo" in page
 
         def post(action):
             body = json.dumps(action).encode("utf-8")

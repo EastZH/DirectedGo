@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from graphgo import (
+from directedgo import (
     Color,
+    DirectedGoError,
     Game,
-    GraphGoError,
     TopologyChangedError,
     square_grid,
     torus,
@@ -27,7 +27,7 @@ def test_turn_order_alternates_starting_with_black():
 
 def test_playing_out_of_turn_is_refused():
     game = Game(9)
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         game.play("D4", Color.WHITE)
     assert game.num_moves == 0
 
@@ -58,7 +58,7 @@ def test_undo_restores_the_position_and_the_turn():
 
 
 def test_undo_without_history_is_refused():
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         Game(9).undo()
 
 

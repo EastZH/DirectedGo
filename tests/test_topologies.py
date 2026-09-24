@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from graphgo import GraphGoError, custom_graph, from_edges, ring, square_grid, torus
+from directedgo import DirectedGoError, custom_graph, from_edges, ring, square_grid, torus
 
 
 def test_torus_raises_every_vertex_to_degree_4(torus19):
@@ -50,7 +50,7 @@ def test_ring_on_a_circle_has_real_geometry():
 
 
 def test_ring_rejects_degenerate_sizes():
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         ring(2)
 
 
@@ -70,5 +70,5 @@ def test_custom_graph_names_its_own_vertices():
 
 
 def test_grid_rejects_degenerate_dimensions():
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         square_grid(0, 19)

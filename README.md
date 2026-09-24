@@ -1,4 +1,4 @@
-# Directed Go
+# DirectedGo
 
 Go on a graph, where the bindings have a direction. A board is a graph
 `G = (V, E)` — `V` are the points you play on, `E` is the "adjacent to" relation,
@@ -8,7 +8,7 @@ here `E` is data you can rewrite at runtime, one binding at a time.
 **The vertices never change. The bindings do.**
 
 ```python
-from graphgo import square_grid, torus
+from directedgo import square_grid, torus
 
 graph = square_grid(19, 19)
 sorted(graph.label_of(v) for v in graph.neighbors(graph.id_of("A19")))
@@ -27,7 +27,7 @@ at construction, and the edge set is the only field ever written afterwards.
 ## Quickstart
 
 ```python
-from graphgo import Board, Color
+from directedgo import Board, Color
 
 board = Board(19)
 board.place("D4", Color.BLACK)
@@ -63,7 +63,7 @@ point to more points buys it more liberties.
 ## The visual editor
 
 ```bash
-python -m graphgo.server --open
+python -m directedgo.server --open
 ```
 
 A local page (standard library only, bound to loopback). Points and bindings are

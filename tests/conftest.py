@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-from graphgo import Color, Game, Graph, square_grid
+from directedgo import Color, Game, Graph, square_grid
 
 #: (label, colour) placements that build the ko shape, in a legal order.
 KO_SETUP = [
@@ -54,7 +54,7 @@ def grid19() -> Graph:
 @pytest.fixture
 def torus19() -> Graph:
     """The standard board with wrap-around edges: corners gain two neighbours."""
-    from graphgo import torus
+    from directedgo import torus
 
     return torus(19, 19)
 
@@ -62,7 +62,7 @@ def torus19() -> Graph:
 @pytest.fixture
 def ko_board(grid5):
     """A ``Board`` holding the ko shape, ready for black to play ``C3``."""
-    from graphgo import Board
+    from directedgo import Board
 
     board = Board(grid5)
     for label, color in KO_SETUP:

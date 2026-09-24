@@ -27,7 +27,7 @@ from __future__ import annotations
 import itertools
 from typing import AbstractSet, Iterable, Iterator, Sequence
 
-from .errors import GraphGoError, OutOfBoundsError
+from .errors import DirectedGoError, OutOfBoundsError
 
 __all__ = ["Graph"]
 
@@ -69,25 +69,25 @@ class Graph:
         positions: Sequence[tuple[float, float]] | None = None,
     ) -> None:
         if n < 0:
-            raise GraphGoError(f"vertex count must be non-negative, got {n}")
+            raise DirectedGoError(f"vertex count must be non-negative, got {n}")
         self._n = n
         self._adj: list[set[int]] = [set() for _ in range(n)]
 
         if labels is None:
             labels = [str(i) for i in range(n)]
         if len(labels) != n:
-            raise GraphGoError(f"got {len(labels)} labels for {n} vertices")
+            raise DirectedGoError(f"got {len(labels)} labels for {n} vertices")
         self._labels = list(labels)
         self._label_index = {label: v for v, label in enumerate(self._labels)}
         if len(self._label_index) != n:
-            raise GraphGoError("labels must be unique")
+            raise DirectedGoError("labels must be unique")
 
         if positions is None:
             # Degenerate geometry; topology builders always supply something
             # real. Kept non-None so every vertex has a position by contract.
             positions = [(float(i), 0.0) for i in range(n)]
         if len(positions) != n:
-            raise GraphGoError(f"got {len(positions)} positions for {n} vertices")
+            raise DirectedGoError(f"got {len(positions)} positions for {n} vertices")
         self._positions = [(float(x), float(y)) for x, y in positions]
         self._alive = [True] * n
 
@@ -205,7 +205,7 @@ class Graph:
         else:
             text = str(label)
             if text in self._label_index:
-                raise GraphGoError(f"duplicate label {text!r}")
+                raise DirectedGoError(f"duplicate label {text!r}")
         x, y = (0.0, 0.0) if position is None else (float(position[0]), float(position[1]))
 
         self._adj.append(set())
@@ -374,7 +374,7 @@ class Graph:
         v = self._check_alive(v)
         new = {self._check_alive(u) for u in nbrs}
         if v in new:
-            raise GraphGoError(f"vertex {v} cannot be its own neighbour")
+            raise DirectedGoError(f"vertex {v} cannot be its own neighbour")
         old = self._adj[v]
         if directed:
             self._adj[v] = new
@@ -427,9 +427,9 @@ class Graph:
         for a in range(self._n):
             for b in self._adj[a]:
                 if a not in self._adj[b]:
-                    raise GraphGoError(f"adjacency not symmetric: {a} -> {b}")
+                    raise DirectedGoError(f"adjacency not symmetric: {a} -> {b}")
                 if a == b:
-                    raise GraphGoError(f"self-loop at {a}")
+                    raise DirectedGoError(f"self-loop at {a}")
 
     # ------------------------------------------------------------------
     # Internals
@@ -460,7 +460,7 @@ class Graph:
 
     def _check_distinct(self, a: int, b: int) -> None:
         if a == b:
-            raise GraphGoError(f"vertex {a} cannot be bound to itself")
+            raise DirectedGoError(f"vertex {a} cannot be bound to itself")
 
     def __repr__(self) -> str:
         return f"<Graph n={self._n} edges={self.edge_count()} rev={self._rev}>"

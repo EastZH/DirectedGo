@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from graphgo import Graph, GraphGoError, OutOfBoundsError, square_grid
+from directedgo import DirectedGoError, Graph, OutOfBoundsError, square_grid
 
 CORNERS = ["A1", "A19", "T1", "T19"]
 EDGES = ["A10", "K1", "K19", "T10"]
@@ -93,7 +93,7 @@ def test_every_mutator_bumps_revision_exactly_once():
 
 def test_self_loop_rejected_without_bumping_revision():
     graph = square_grid(5, 5)
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         graph.bind(3, 3)
     assert graph.revision == 0
 
@@ -155,7 +155,7 @@ def test_an_auto_label_steps_past_one_that_is_already_taken():
 def test_an_explicit_duplicate_label_is_still_refused():
     graph = Graph(0)
     graph.add_vertex(label="same")
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         graph.add_vertex(label="same")
 
 

@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import pytest
 
-from graphgo import (
+from directedgo import (
     Board,
     Color,
-    GraphGoError,
+    DirectedGoError,
     TopologyChangedError,
     ring,
     torus,
@@ -138,7 +138,7 @@ def test_rebind_clears_ko_and_history(ko_game):
     ko_game.rebind(torus(5, 5).edges())
 
     assert ko_game.board.ko_point is None, "the ko point depended on the old geometry"
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         ko_game.undo()  # history is cleared by default
 
 

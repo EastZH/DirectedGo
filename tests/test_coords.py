@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from graphgo import ALPHABET, GO_COLUMNS, NUMERIC, OutOfBoundsError, square_grid
+from directedgo import ALPHABET, GO_COLUMNS, NUMERIC, OutOfBoundsError, square_grid
 
 
 def test_round_trip_over_every_vertex(grid19):

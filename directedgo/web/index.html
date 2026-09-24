@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>graphgo — 图围棋编辑器</title>
+<title>directedgo — 图围棋编辑器</title>
 <style>
   :root {
     --bg: #12161c;
@@ -127,7 +127,7 @@
 </div>
 
 <div id="panel">
-  <h1>graphgo <small>图围棋编辑器</small></h1>
+  <h1>directedgo <small>图围棋编辑器</small></h1>
 
   <div class="modes">
     <button id="undo" disabled>撤销 <kbd>^Z</kbd></button>
@@ -229,7 +229,7 @@ const ERROR_TEXT = {
   OccupiedError: "这个点已经有子了",
   KoError:       "打劫，不能立刻回提",
   OutOfBoundsError: "这个点不存在（可能已经被删了）",
-  GraphGoError:  "",
+  DirectedGoError:  "",
 };
 const friendly = (data) => ERROR_TEXT[data.kind] || data.error;
 
@@ -801,7 +801,7 @@ document.getElementById("export").onclick = async () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "graphgo-plane.json";
+  a.download = "directedgo-plane.json";
   a.click();
   URL.revokeObjectURL(url);
   const s = d.state.stats;

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from graphgo import Board, Color, GraphGoError, OccupiedError, custom_graph
+from directedgo import Board, Color, DirectedGoError, OccupiedError, custom_graph
 
 
 def ring4() -> Board:
@@ -121,5 +121,5 @@ def test_an_occupied_vertex_is_still_rejected(grid5):
 
 def test_playing_an_empty_stone_is_still_refused(grid5):
     board = Board(grid5)
-    with pytest.raises(GraphGoError):
+    with pytest.raises(DirectedGoError):
         board.place("C3", Color.EMPTY)

@@ -2,7 +2,7 @@
 
 This is the interactive layer: points live at plane coordinates, and you can add
 or remove them and rewire the bindings between them. It is deliberately thin --
-all the topology lives in :class:`~graphgo.graph.Graph`, and this adds only the
+all the topology lives in :class:`~directedgo.graph.Graph`, and this adds only the
 coordinate lookup and the JSON snapshot a renderer wants.
 
 Point coordinates are the graph's ``positions``, in plane units with ``y``
@@ -15,7 +15,7 @@ from typing import Any
 
 from .board import Board, MoveResult
 from .colors import Color
-from .errors import GraphGoError, OutOfBoundsError
+from .errors import DirectedGoError, OutOfBoundsError
 from .graph import Graph
 from .topologies import square_grid
 
@@ -25,7 +25,12 @@ __all__ = ["Plane"]
 EPSILON = 1e-6
 
 #: Written into every exported document, so a bad import fails loudly.
-DOCUMENT_FORMAT = "graphgo.plane/1"
+DOCUMENT_FORMAT = "directedgo.plane/1"
+
+#: Documents carrying any of these are read. The project used to be called
+#: graphgo and files saved under that name are perfectly ordinary positions --
+#: refusing them would break every export already sitting on disk.
+LEGACY_FORMATS = frozenset({"graphgo.plane/1", DOCUMENT_FORMAT})
 
 #: Stones travel in documents as single letters, so the file stays readable.
 _MARKS = {Color.BLACK: "B", Color.WHITE: "W", Color.EMPTY: None}
@@ -147,7 +152,7 @@ class Plane:
         """
         x, y = float(x), float(y)
         if self.at(x, y) is not None:
-            raise GraphGoError(f"there is already a point at ({x:g}, {y:g})")
+            raise DirectedGoError(f"there is already a point at ({x:g}, {y:g})")
         v = self._graph.add_vertex(label=label, position=(x, y))
         self._board.sync()
         return v
@@ -180,7 +185,7 @@ class Plane:
         """
         value = _color(color)
         if value is Color.EMPTY:
-            raise GraphGoError("the move belongs to a colour, not to empty")
+            raise DirectedGoError("the move belongs to a colour, not to empty")
         self._turn = value
 
     def play(self, v: int | str, color: Color | str) -> MoveResult:
@@ -342,9 +347,9 @@ class Plane:
         selection in the viewer, say -- has to let go of it.
         """
         if not isinstance(document, dict):
-            raise GraphGoError("document must be a JSON object")
-        if document.get("format") != DOCUMENT_FORMAT:
-            raise GraphGoError(
+            raise DirectedGoError("document must be a JSON object")
+        if document.get("format") not in LEGACY_FORMATS:
+            raise DirectedGoError(
                 f"unsupported document format {document.get('format')!r}; "
                 f"expected {DOCUMENT_FORMAT!r}"
             )
@@ -357,7 +362,7 @@ class Plane:
             try:
                 x, y = float(point["x"]), float(point["y"])
             except (KeyError, TypeError, ValueError) as exc:
-                raise GraphGoError(f"point {position} has no usable x/y: {exc}") from None
+                raise DirectedGoError(f"point {position} has no usable x/y: {exc}") from None
             # Labels must stay unique; a hand-edited file might not manage it.
             text = str(point.get("label") or f"p{position}")
             while text in taken:
@@ -371,7 +376,7 @@ class Plane:
             try:
                 a, b = ids[binding["a"]], ids[binding["b"]]
             except (KeyError, TypeError, IndexError) as exc:
-                raise GraphGoError(f"binding {n} refers to a missing point: {exc}") from None
+                raise DirectedGoError(f"binding {n} refers to a missing point: {exc}") from None
             graph.bind(a, b, directed=bool(binding.get("directed")))
 
         plane = cls(

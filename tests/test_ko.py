@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from graphgo import Color, Game, KoError
+from directedgo import Color, Game, KoError
 from conftest import KO_ATTACK, KO_RECAPTURE
 
 
@@ -53,7 +53,7 @@ def test_pass_lifts_the_ko_ban(ko_board):
 
 
 def test_ordinary_moves_do_not_set_a_ko_point(grid19):
-    from graphgo import Board
+    from directedgo import Board
 
     board = Board(grid19)
     for label, color in (("D4", Color.BLACK), ("Q16", Color.WHITE), ("D16", Color.BLACK)):

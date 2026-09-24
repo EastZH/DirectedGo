@@ -16,7 +16,7 @@ import math
 from typing import Iterable, Sequence
 
 from .coords import GO_STANDARD, LabelScheme
-from .errors import GraphGoError
+from .errors import DirectedGoError
 from .graph import Graph
 
 __all__ = ["square_grid", "torus", "ring", "from_edges", "custom_graph", "grid_edges"]
@@ -59,7 +59,7 @@ def square_grid(
     stone, since a lone stone there would have no liberties.
     """
     if width <= 0 or height <= 0:
-        raise GraphGoError(f"grid must be positive, got {width}x{height}")
+        raise DirectedGoError(f"grid must be positive, got {width}x{height}")
 
     n = width * height
     labels = tuple(
@@ -93,7 +93,7 @@ def ring(n: int, *, scheme: LabelScheme = GO_STANDARD) -> Graph:
     rules engine only ever talks to the graph.
     """
     if n < 3:
-        raise GraphGoError(f"a ring needs at least 3 vertices, got {n}")
+        raise DirectedGoError(f"a ring needs at least 3 vertices, got {n}")
     labels = tuple(scheme.label_of_xy(i, 0, n, 1) for i in range(n))
     positions = tuple(
         (math.cos(2 * math.pi * i / n), math.sin(2 * math.pi * i / n)) for i in range(n)

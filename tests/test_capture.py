@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from graphgo import Board, Color
+from directedgo import Board, Color
 
 
 def test_corner_capture_on_the_grid(grid19):

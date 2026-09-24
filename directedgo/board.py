@@ -17,7 +17,7 @@ from typing import Iterable, Iterator
 
 from .colors import Color
 from .errors import (
-    GraphGoError,
+    DirectedGoError,
     IllegalMoveError,
     KoError,
     OccupiedError,
@@ -83,7 +83,7 @@ class Board:
         if isinstance(graph, int) and not isinstance(graph, bool):
             graph = square_grid(graph, graph)
         if not isinstance(graph, Graph):
-            raise GraphGoError(f"expected a Graph or a board size, got {type(graph).__name__}")
+            raise DirectedGoError(f"expected a Graph or a board size, got {type(graph).__name__}")
         self._graph = graph
         self._stones: list[Color] = [Color.EMPTY] * graph.n
         self._ko_point: int | None = None
@@ -165,7 +165,7 @@ class Board:
         """
         v = self._graph.id_of(vertex)
         if self._stones[v] is Color.EMPTY:
-            raise GraphGoError(f"vertex {v} is empty and belongs to no group")
+            raise DirectedGoError(f"vertex {v} is empty and belongs to no group")
         return self._groups_map()[v]
 
     def _groups_map(self) -> dict[int, frozenset[int]]:
@@ -339,7 +339,7 @@ class Board:
         v = self._graph.id_of(vertex)
         color = Color(color)
         if color is Color.EMPTY:
-            raise GraphGoError("cannot play an empty stone")
+            raise DirectedGoError("cannot play an empty stone")
         if self._stones[v] is not Color.EMPTY:
             raise OccupiedError(v, color)
         if self._ko_point is not None and v == self._ko_point:
@@ -559,7 +559,7 @@ class Board:
                 for v in blk:
                     self._stones[v] = Color.EMPTY
                 removed.extend(blk)
-        raise GraphGoError("settle did not reach a fixed point")
+        raise DirectedGoError("settle did not reach a fixed point")
 
     # ------------------------------------------------------------------
     # Rendering
@@ -574,7 +574,7 @@ class Board:
         """
         cells = {self._graph.xy_of(v): v for v in range(self._graph.n)}
         if len(cells) != self._graph.n:
-            raise GraphGoError(
+            raise DirectedGoError(
                 "vertices do not occupy distinct grid positions; use to_lines() for this graph"
             )
         if not cells:

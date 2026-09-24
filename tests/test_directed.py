@@ -19,7 +19,7 @@ each other there.
 
 from __future__ import annotations
 
-from graphgo import Board, Color, custom_graph, square_grid
+from directedgo import Board, Color, custom_graph, square_grid
 
 # NOTE: a "group" here is a strongly connected set of same-coloured stones, so a
 # mutual pair and a longer directed cycle are the same thing. See

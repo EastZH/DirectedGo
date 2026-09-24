@@ -1,10 +1,10 @@
-"""graphgo -- Go on a graph, where the vertices are fixed and the bindings are not.
+"""directedgo -- Go on a graph, where the vertices are fixed and the bindings are not.
 
 Standard Go is Go on the 19x19 grid graph. Once the adjacency relation is data
 rather than a hard-coded loop, the same rules play on a torus, a ring, or any
 graph you like, while the 361 vertices keep their identities and positions.
 
-    >>> from graphgo import Board, Color, square_grid, torus
+    >>> from directedgo import Board, Color, square_grid, torus
     >>> board = Board(square_grid(19, 19))
     >>> board.place("D4", Color.BLACK).captured
     ()
@@ -34,7 +34,7 @@ from .board import Board, BoardState, MoveResult
 from .colors import Color
 from .coords import ALPHABET, GO_COLUMNS, GO_STANDARD, NUMERIC, LabelScheme
 from .errors import (
-    GraphGoError,
+    DirectedGoError,
     IllegalMoveError,
     KoError,
     OccupiedError,
@@ -43,13 +43,13 @@ from .errors import (
 )
 from .game import Game
 from .graph import Graph
-from .plane import DOCUMENT_FORMAT, Plane
+from .plane import DOCUMENT_FORMAT, LEGACY_FORMATS, Plane
 from .topologies import custom_graph, from_edges, grid_edges, ring, square_grid, torus
 
-# The local web viewer (:mod:`graphgo.server`) is deliberately *not* imported
+# The local web viewer (:mod:`directedgo.server`) is deliberately *not* imported
 # here. It is a separate tool, and pulling it in would make ``python -m
-# graphgo.server`` import itself twice. Reach it directly:
-# ``from graphgo.server import serve``.
+# directedgo.server`` import itself twice. Reach it directly:
+# ``from directedgo.server import serve``.
 
 __version__ = "0.1.0"
 
@@ -59,11 +59,12 @@ __all__ = [
     "BoardState",
     "Color",
     "DOCUMENT_FORMAT",
+    "LEGACY_FORMATS",
     "GO_COLUMNS",
     "GO_STANDARD",
     "Game",
     "Graph",
-    "GraphGoError",
+    "DirectedGoError",
     "IllegalMoveError",
     "KoError",
     "LabelScheme",
