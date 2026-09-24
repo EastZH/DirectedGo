@@ -424,6 +424,18 @@ function pointColor(p, field) {
   return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }
 
+/* 单向的线用起点的颜色，往背景色里混一点。色相还认得出这根线从哪来，但比
+   双向线暗一档 —— 否则一张有向图全是高饱和实色，双向线就淹没了。
+   DIMMED 调大就更暗、更退后。 */
+const BACKDROP = [18, 22, 28];     // 就是 --bg #12161c
+const DIMMED = 0.22;
+
+function dimmed(rgbText) {
+  const [r, g, b] = rgbText.match(/\d+/g).map(Number);
+  const mix = (c, i) => Math.round(c * (1 - DIMMED) + BACKDROP[i] * DIMMED);
+  return `rgb(${mix(r, 0)}, ${mix(g, 1)}, ${mix(b, 2)})`;
+}
+
 /* ---------- 渲染 ---------- */
 function render() {
   const byId = new Map(state.points.map((p) => [p.id, p]));
@@ -464,20 +476,29 @@ function render() {
     const cx = (x1 + x2) / 2 - seg.uy * offsets[i];
     const cy = (y1 + y2) / 2 + seg.ux * offsets[i];
 
-    // 一条线一份渐变，从起点色走到终点色。必须 userSpaceOnUse：默认的
-    // objectBoundingBox 是沿外框左右走的，竖着的线也会变成左右渐变。
-    const gid = "grad" + i;
-    const ramp = el("linearGradient", {
-      id: gid, gradientUnits: "userSpaceOnUse", x1, y1, x2, y2,
-    });
-    ramp.appendChild(el("stop", { offset: "0", "stop-color": colors.get(seg.b.a) }));
-    ramp.appendChild(el("stop", { offset: "1", "stop-color": colors.get(seg.b.b) }));
-    gradients.appendChild(ramp);
+    // 双向画成两端之间的渐变；单向用**起点的颜色调暗一档**的实色。单向如果用
+    // 渐变，走到末端就是终点的颜色，看不出这根线是从哪头来的；如果用全亮的
+    // 实色，一张有向图会花成一片，把双向线淹掉。
+    let stroke;
+    if (seg.b.directed) {
+      stroke = dimmed(colors.get(seg.b.a));
+    } else {
+      // 必须 userSpaceOnUse：默认的 objectBoundingBox 是沿外框左右走的，
+      // 竖着的线也会变成左右渐变。
+      const gid = "grad" + i;
+      const ramp = el("linearGradient", {
+        id: gid, gradientUnits: "userSpaceOnUse", x1, y1, x2, y2,
+      });
+      ramp.appendChild(el("stop", { offset: "0", "stop-color": colors.get(seg.b.a) }));
+      ramp.appendChild(el("stop", { offset: "1", "stop-color": colors.get(seg.b.b) }));
+      gradients.appendChild(ramp);
+      stroke = `url(#${gid})`;
+    }
 
     const path = el("path", {
       d: `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`,
       class: "edge",
-      stroke: `url(#${gid})`,
+      stroke,
     });
     if (seg.b.directed) path.setAttribute("marker-end", "url(#arrow)");
     edgesG.appendChild(path);

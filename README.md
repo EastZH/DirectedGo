@@ -93,7 +93,11 @@ python -m directedgo.server --open
 A local page (standard library only, bound to loopback). Points and bindings are
 editable, stones are playable, and the drawing is opinionated:
 
-- a mutual pair is **one shared line**; a one-way binding gets **an arrowhead**;
+- a mutual pair is **one shared line**, drawn as a gradient between the two ends;
+- a one-way binding is drawn in the **source's own colour, dimmed**, with an
+  arrowhead. The hue says which end it came from, and dimming keeps a page full
+  of arrows from shouting over the mutual lines. A plain gradient would have
+  arrived at the target wearing the target's own colour;
 - **colour is a function of position**, so it never moves — not on undo, not on
   import, not because you added a point elsewhere;
 - bindings landing on the same segment **curve apart**, shortest claiming first,
